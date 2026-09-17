@@ -18,7 +18,6 @@ enum class Resolution : int {
     R640x360 = 1,
     R854x480 = 2,
     R960x540 = 3,
-    R1280x720 = 4,
 };
 
 enum class LogLevel : int {
