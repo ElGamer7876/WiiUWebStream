@@ -5,7 +5,7 @@ A Wii U **Aroma/WUPS plugin** that streams the TV and GamePad outputs over your 
 > `v0.2.0-dev` is a **pre-release development build**. TV and GamePad streaming have now been confirmed on a physical Wii U, but audio, high-risk overrides and broad game compatibility still need more hardware testing before a stable release.
 
 > [!WARNING]
-> Installing and using this plugin can cause the Wii U to **freeze during gameplay**. In some cases the console may stop responding completely and require a **forced power-off** by holding the console's POWER button. A forced shutdown can cause loss of unsaved progress and may increase the risk of data or filesystem corruption. Use this development build at your own risk, save your game frequently, and avoid testing HIGH RISK options when important unsaved data is open.
+> Installing and using this plugin can cause the Wii U to **freeze during gameplay**. In some cases the console may stop responding completely and require a **forced power-off** by holding the console's POWER button. A forced shutdown can cause loss of unsaved progress and may increase the risk of data or filesystem corruption. If this happens, we recommend lowering the output resolution first (and, if necessary, FPS/JPEG quality). If freezes continue, disable or uninstall Wii U Web Stream before continuing to play. Use this development build at your own risk, save your game frequently, and avoid testing HIGH RISK options when important unsaved data is open.
 
 ## Important: WUPS config memory warning
 
