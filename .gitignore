@@ -1,0 +1,7 @@
+build/
+*.elf
+*.wps
+*.map
+package/
+SHA256SUMS.txt
+WiiUWebStream-v*.zip
