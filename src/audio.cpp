@@ -27,9 +27,9 @@ struct AudioSlot {
 
 struct AudioState {
     std::array<AudioSlot, 8> slots{};
-    std::atomic_uint64_t sequence{0};
-    std::atomic_uint64_t captured{0};
-    std::atomic_uint64_t dropped{0};
+    std::atomic_uint32_t sequence{0};
+    std::atomic_uint32_t captured{0};
+    std::atomic_uint32_t dropped{0};
     std::atomic_int clients{0};
     std::atomic_uint32_t sampleRate{0};
 };
@@ -62,7 +62,9 @@ void Capture(Audio::Source source, void *raw) {
     auto *params = static_cast<AXFinalMixParams *>(raw);
     if (params->data == nullptr || params->numSamples == 0 || params->numChannelInput == 0) return;
 
-    const uint64_t next = state.sequence.load(std::memory_order_relaxed) + 1;
+    uint32_t next = state.sequence.load(std::memory_order_relaxed) + 1U;
+    if (next == 0) next = 1;
+
     AudioSlot &slot = state.slots[next % state.slots.size()];
     if (slot.lock.test_and_set(std::memory_order_acquire)) {
         state.dropped.fetch_add(1, std::memory_order_relaxed);
@@ -184,14 +186,16 @@ void ClientDisconnected(Source source) {
 
 bool ReadAfter(Source source, uint64_t &lastSequence, Packet &out) {
     AudioState &state = State(source);
-    const uint64_t latest = state.sequence.load(std::memory_order_acquire);
-    if (latest == 0 || latest <= lastSequence) return false;
+    const uint32_t latest = state.sequence.load(std::memory_order_acquire);
+    if (latest == 0 || latest == static_cast<uint32_t>(lastSequence)) return false;
+
     AudioSlot &slot = state.slots[latest % state.slots.size()];
     if (slot.lock.test_and_set(std::memory_order_acquire)) return false;
     const bool valid = slot.packet.sequence == latest && slot.packet.bytes <= slot.packet.pcm.size();
     if (valid) out = slot.packet;
     slot.lock.clear(std::memory_order_release);
     if (!valid) return false;
+
     lastSequence = latest;
     return true;
 }
