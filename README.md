@@ -1,58 +1,102 @@
 # Wii U Web Stream
 
-A Wii U **Aroma/WUPS plugin** that streams the TV and GamePad outputs over your local network using HTTP/MJPEG. It is designed for modern browsers, OBS Studio, VLC/mpv-style MJPEG clients, phones and tablets without a dedicated PC client.
+A Wii U **Aroma/WUPS plugin** that streams the TV and GamePad outputs over your local network using HTTP/MJPEG, with optional experimental PCM audio. It is designed for modern browsers, OBS Studio, phones, tablets and simple MJPEG clients without a dedicated PC application.
 
-`v0.2.0-dev` is a development build. The current branch compiles in CI with the Wii U toolchain, including the optional AX final-mix audio path, but physical Wii U testing is still required before a stable release.
+> `v0.2.0-dev` is a **pre-release development build**. TV and GamePad streaming have now been confirmed on a physical Wii U, but audio, high-risk overrides and broad game compatibility still need more hardware testing before a stable release.
+
+## Important: WUPS config memory warning
+
+During physical Wii U testing, the original full WUPS configuration menu could run out of memory while Aroma was rendering the large number of settings.
+
+To reduce that risk, the current build intentionally keeps the **WUPS menu minimal** and moves the full configuration interface to the browser:
+
+```text
+http://WIIU_IP:7770/settings
+```
+
+When the minimal WUPS menu is opened, Wii U Web Stream temporarily stops capture/audio and releases their working buffers while Aroma renders the menu. The network listener remains available so Web Settings can still be opened from another device.
+
+The WUPS menu is intended primarily as a recovery entry point. Do **not** expect the full settings list there anymore.
 
 ## Default ports
 
 | Port | Purpose |
 |---|---|
-| `7770` | Web dashboard, status, snapshots, OBS pages and audio endpoints |
+| `7770` | Dashboard, Web Settings, status, snapshots, OBS pages and audio endpoints |
 | `7771` | TV MJPEG |
 | `7772` | GamePad MJPEG |
 
 No UPnP, NAT-PMP or automatic port forwarding is used. Public/non-LAN source addresses are rejected by the server.
+
+## Web Settings
+
+Open:
+
+```text
+http://WIIU_IP:7770/settings
+```
+
+The page provides the primary configuration UI for:
+
+- Presets: Custom, Low Latency, Balanced, Quality and OBS.
+- TV/GamePad enable switches.
+- TV/GamePad target FPS.
+- Output resolutions.
+- JPEG quality.
+- Adaptive FPS.
+- Listener ports.
+- Health watchdog.
+- Optional LAN access code.
+- Logging level.
+- High-risk actions and their confirmation gate.
+- Experimental audio streaming.
+- Continuous capture.
+
+Listener/server changes are applied asynchronously outside the HTTP request thread. This avoids stopping the web listener from inside its own client thread when the web port changes. Reconnect on the new port after a few seconds if you change it.
 
 ## v0.2 highlights
 
 ### Presets
 
 - **Low Latency** — higher FPS, lower JPEG quality and reduced output size.
-- **Balanced** — recommended general-purpose profile.
+- **Balanced** — general-purpose default.
 - **Quality** — up to 960x540 TV with lower FPS and higher JPEG quality.
-- **OBS** — up to 960x540 TV plus GamePad-oriented output with OBS-friendly quality/FPS.
+- **OBS** — OBS-oriented quality/FPS settings.
 - **Custom** — manual FPS, resolution and JPEG settings.
 
-Changing a manual FPS/resolution/JPEG value automatically makes the profile Custom.
+### Adaptive FPS
+
+When enabled, the capture path keeps a separate effective FPS. If the shared JPEG worker is still busy when a new frame arrives, the effective FPS backs off instead of blocking the render path. It gradually recovers toward the configured target after the encoder remains healthy.
 
 ### High-risk actions
 
-Experimental options stay hidden until both of these switches are enabled in the WUPS configuration menu:
+High-risk options remain hidden until both of these are enabled in Web Settings:
 
 ```text
 Enable high-risk actions
 I understand and accept the risk
 ```
 
-After both switches are accepted, the plugin exposes a separate **High-risk overrides (HIGH RISK)** section. It currently allows:
+The current high-risk section can expose:
 
 - TV target FPS up to 60.
 - GamePad target FPS up to 60.
 - JPEG quality up to 95.
-- TV/GamePad output resolutions up to 1280x720 and 1920x1080.
+- 1280x720 and 1920x1080 output options.
 - **Audio streaming (HIGH RISK)**.
 - **Continuous capture without viewers (HIGH RISK)**.
 
-These settings are intentionally not treated as safe defaults. They can increase CPU, GPU, mapped-memory, network and encoder load and may reduce game performance or cause instability. Disabling either high-risk confirmation switch automatically returns FPS, JPEG quality and resolutions to the safe range and disables high-risk audio/continuous capture.
+These are experimental, not recommended defaults. They can sharply increase CPU, GPU, mapped-memory, encoder and network load and can reduce game performance or freeze/crash the console.
+
+Disabling either high-risk confirmation switch automatically returns FPS, JPEG quality and resolutions to the safe range and disables high-risk audio/continuous capture.
 
 ### Audio streaming (HIGH RISK)
 
-Audio is captured from the Wii U AX **device final mix** for TV and DRC/GamePad. The callback only copies/down-converts samples into a small fixed ring; it does not allocate memory, encode JPEG, perform socket I/O or wait for a busy audio slot. If a slot is in use, that audio packet is dropped instead of blocking the AX callback.
+Audio is captured from the Wii U AX device final mix for TV and DRC/GamePad. The callback copies/down-converts samples into a small fixed ring; it does not allocate memory, encode video, perform socket I/O or wait for a busy slot. A busy slot causes an audio packet drop instead of blocking the AX callback.
 
-The plugin preserves and chains the previously installed TV/DRC final-mix callbacks and restores them when audio streaming is disabled or the plugin runtime stops. The watchdog periodically checks that the callbacks remain installed while the feature is active.
+The plugin preserves/chains the previously installed TV/DRC final-mix callbacks and restores them when audio streaming is disabled or the runtime stops.
 
-Audio is served as stereo PCM16LE inside a streaming WAV container. Current endpoints are:
+Audio is served as stereo PCM16LE in a streaming WAV container:
 
 ```text
 http://WIIU_IP:7770/audio/tv.wav
@@ -61,24 +105,27 @@ http://WIIU_IP:7771/audio.wav
 http://WIIU_IP:7772/audio.wav
 ```
 
-The `7771` endpoint maps to TV audio and the `7772` endpoint maps to GamePad audio. The dashboard only exposes its audio controls when the audio backend is active.
-
-Audio streaming is optional and defaults to **off**. It requires the high-risk double confirmation first.
-
-### Adaptive FPS
-
-When enabled, the capture path keeps a separate effective FPS. If the shared JPEG worker is still busy when a new frame arrives, the effective FPS backs off rather than blocking the render thread. It gradually recovers toward the configured target after the encoder has remained healthy.
+The `7771` endpoint maps to TV audio and `7772` maps to GamePad audio. Audio defaults to **off** and requires the high-risk double confirmation.
 
 ### Client and socket safeguards
 
 - Up to 8 clients per listener.
-- Capture still encodes only one JPEG per source/frame and fans that frame out to clients.
-- Slow or stalled sockets are gated through WUT `select()` with a 3-second readiness timeout before reads/writes.
-- A stalled client is disconnected instead of blocking capture or the listener indefinitely.
-- Closing the Aroma config only restarts listeners whose configured port changed or which are currently down.
-- The network watchdog retries failed listeners every 5 seconds without touching GX2 state.
+- One JPEG encode per source/frame, shared by all clients.
+- Slow or stalled sockets use WUT `select()` with a 3-second readiness timeout.
+- Stalled clients are disconnected instead of blocking the capture producer.
+- Listener bind conflicts are detected synchronously.
+- Failed listeners can be retried independently.
+- Network/listener maintenance continues even if stream-stall watchdog checks are disabled.
 
-### Diagnostics
+## Dashboard and diagnostics
+
+Dashboard:
+
+```text
+http://WIIU_IP:7770/
+```
+
+Diagnostics:
 
 ```text
 http://WIIU_IP:7770/api/status
@@ -86,25 +133,22 @@ http://WIIU_IP:7770/debug/performance
 http://WIIU_IP:7770/health
 ```
 
-`/api/status` includes uptime, actual FPS, target/effective FPS, connected video clients, last-frame age, capture attempts, rate-limit drops, encoder-busy drops, copy/queue/encode failures, average JPEG size, average scaling time, average JPEG encoding time, listener state, watchdog counters, high-risk state, audio-active state, audio client counts and audio dropped-packet counters.
+`/api/status` includes uptime, actual FPS, target/effective FPS, video clients, last-frame age, capture/drop/failure counters, average JPEG size, scaling/encode timing, listener state, watchdog counters and audio state/counters.
 
-### Port conflict detection
+## Optional access code
 
-The three sockets are created/bound before listener threads start. If another plugin already owns one of the ports, the other available listeners can still start and the failed listener reports its bind error in `/api/status` and the WUPS menu.
-
-### Optional access code
-
-Enable **Require URL access code** in the WUPS menu and choose a numeric code. Then use:
+Enable **Require URL access code** in Web Settings and choose a numeric code. Then use URLs such as:
 
 ```text
 http://WIIU_IP:7770/?key=777777
+http://WIIU_IP:7770/settings?key=777777
 http://WIIU_IP:7771/stream.mjpg?key=777777
 http://WIIU_IP:7772/stream.mjpg?key=777777
 ```
 
-Audio endpoints use the same `?key=CODE` access control when enabled.
+Audio endpoints use the same `?key=CODE` control when enabled.
 
-This is LAN access control only. HTTP is not encrypted, so the key must not be treated as an Internet-grade password.
+This is LAN access control only. HTTP is not encrypted, so the code is not an Internet-grade password.
 
 ## OBS
 
@@ -132,7 +176,7 @@ Picture-in-picture:
 http://WIIU_IP:7770/obs/dual?layout=pip
 ```
 
-When high-risk audio streaming is active, single-source OBS pages include their corresponding audio stream automatically. The dual page uses TV audio by default. It also accepts:
+When high-risk audio streaming is active, single-source OBS pages include the corresponding audio stream. The dual page uses TV audio by default and accepts:
 
 ```text
 audio=tv
@@ -140,7 +184,7 @@ audio=gamepad
 audio=none
 ```
 
-Single-source OBS pages accept:
+Single-source OBS pages also accept:
 
 ```text
 fit=contain|cover
@@ -148,14 +192,6 @@ bg=transparent|black
 mirror=0|1
 rotate=0|90|180|270
 ```
-
-Example:
-
-```text
-http://WIIU_IP:7770/obs/gamepad?fit=cover&mirror=1&rotate=180
-```
-
-If access-code protection is enabled, append `key=CODE` as another query parameter.
 
 ## Snapshots
 
@@ -180,7 +216,7 @@ single CPU2 JPEG worker
       +--> latest shared TV JPEG
       +--> latest shared GamePad JPEG
                  |
-                 +--> Browser / OBS / phone / VLC clients
+                 +--> Browser / OBS / phone clients
 
 AX TV / DRC final mix
       |
@@ -193,17 +229,13 @@ stereo PCM16LE / streaming WAV
       +--> Browser / OBS audio clients
 ```
 
-One video frame is encoded once per source and shared between all clients. Slow network clients never hold the capture mutex while sending. Frames are dropped instead of blocking the game's render thread when the encoder is overloaded.
-
-The audio callback follows the same principle: a busy ring slot causes an audio packet drop rather than a wait inside AX.
-
-The capture watchdog is deliberately conservative: it detects stale streams and requests a fresh capture. It does **not** tear down GX2 state from a background thread. The network watchdog only repairs listeners and checks the AX callback chain while high-risk audio is active.
+One video frame is encoded once per source and shared. Frames are dropped instead of blocking the game's render path when the encoder is overloaded. The audio callback follows the same principle: a busy ring slot causes a packet drop rather than a wait inside AX.
 
 ## Build
 
 The repository includes a pinned Dockerfile and GitHub Actions build.
 
-With Podman (open source):
+With Podman:
 
 ```powershell
 podman build -t wiiu-web-stream-builder .
@@ -224,22 +256,24 @@ SD:/wiiu/environments/aroma/plugins/WiiUWebStream.wps
 
 ## Current validation status
 
-The integrated `v0.2.0-dev` source has successfully cross-compiled with the pinned devkitPPC/WUT/WUPS toolchain and produced a non-empty `WiiUWebStream.wps` in CI.
+The current `v0.2.0-dev` source successfully cross-compiles with the pinned devkitPPC/WUT/WUPS toolchain and produces a non-empty `.wps` in CI.
 
-That confirms source/API/link compatibility for the current build. It does **not** prove runtime stability, audio correctness, latency, game compatibility, 60 FPS operation or 1080p performance on physical Wii U hardware. Those still require console testing.
+A first physical Wii U test has confirmed that the dashboard loads and both TV and GamePad video streams can operate simultaneously on real hardware. This is an important milestone, but it does **not** yet establish stability across games, long sessions, audio correctness, high-risk resolutions/FPS, or every Aroma environment.
+
+The WUPS-menu memory issue discovered during that test is the reason full configuration has been moved to the Web Settings page and capture/audio are paused while the minimal WUPS menu is open.
 
 ## Intentionally deferred
 
-These ideas remain disabled because they need additional API/hardware validation or could raise Wii U load too far:
+These remain disabled or unavailable pending additional validation:
 
 - mDNS / `wiiu.local`
 - H.264 backend
 - large multi-buffer capture paths
 - asynchronous/double-buffer GX2 readback replacing `GX2DrawDone()`
 - automatic title blacklist until the title-ID path is verified
-- continuous recording or automatic repeated snapshots to SD
+- continuous recording to SD
 
-High-risk 720p/1080p and 30–60 FPS overrides now exist, but they remain experimental rather than recommended operating modes.
+High-risk 720p/1080p and 30–60 FPS overrides exist, but remain experimental rather than recommended operating modes.
 
 ## License
 
