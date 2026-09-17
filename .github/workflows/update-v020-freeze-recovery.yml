@@ -1,0 +1,59 @@
+name: Update v0.2.0-dev freeze recovery
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message == 'Update v0.2.0-dev freeze recovery'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update pre-release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## Wii U Web Stream v0.2.0-dev
+
+          First public development pre-release candidate for hardware testing.
+
+          ### Important safety warning
+
+          Installing and using this plugin can cause the Wii U to **freeze during gameplay**, including in the middle of a game. In some cases the console may stop responding completely and require a **forced power-off** by holding the console's POWER button.
+
+          A forced shutdown can cause loss of unsaved progress and may increase the risk of data or filesystem corruption. Save your game before testing, avoid using the plugin when important unsaved data is open, and treat all **HIGH RISK** options as experimental.
+
+          **If this happens:** lower the output resolution first. If needed, also reduce FPS and JPEG quality. If freezes continue, disable or uninstall Wii U Web Stream before continuing to play.
+
+          ### Confirmed on physical Wii U
+          - Web dashboard loads over LAN.
+          - TV video streaming works.
+          - GamePad video streaming works.
+          - TV + GamePad can stream simultaneously.
+
+          ### Included
+          - Web Settings at `/settings`.
+          - Minimal low-memory WUPS recovery/status menu.
+          - Capture/audio buffers are released while the WUPS menu is open to reduce Aroma config-renderer memory pressure.
+          - Balanced / Low Latency / Quality / OBS / Custom presets.
+          - Adaptive FPS and detailed performance telemetry.
+          - Listener conflict detection, timeouts and automatic listener maintenance.
+          - OBS TV, GamePad, Dual and PiP pages.
+          - Optional LAN access code.
+          - HIGH RISK gate with 720p/1080p, up to 60 FPS, JPEG 95, continuous capture and experimental AX PCM audio streaming.
+
+          ### Important WUPS memory warning
+
+          The previous full WUPS settings menu could run out of memory on real hardware. Full configuration has therefore moved to the browser at `http://WIIU_IP:7770/settings`. The WUPS menu is intentionally minimal.
+
+          HIGH RISK options are experimental and may reduce game performance, freeze or crash the console. Audio and high-load modes still need broader physical hardware testing.
+
+          Install `WiiUWebStream.wps` to:
+          `SD:/wiiu/environments/aroma/plugins/WiiUWebStream.wps`
+          EOF
+
+          gh release edit v0.2.0-dev --repo "$GITHUB_REPOSITORY" --notes-file RELEASE_NOTES.md
