@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible Wii U Web Stream problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Wii U Web Stream. Please include enough information to reproduce the problem.
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version / commit
+      placeholder: v0.1.0-dev or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: aroma
+    attributes:
+      label: Aroma version
+      placeholder: Base Aroma version/date
+    validations:
+      required: true
+  - type: input
+    id: application
+    attributes:
+      label: Wii U application/game
+      placeholder: Game or application where the issue occurs
+    validations:
+      required: true
+  - type: dropdown
+    id: output
+    attributes:
+      label: Affected output
+      options:
+        - TV
+        - GamePad
+        - Both
+        - Web UI / networking
+        - OBS compatibility
+        - Configuration menu
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Streaming settings
+      description: Include ports, target FPS and JPEG quality.
+      placeholder: "Ports 7770/7771/7772, TV 5 FPS, GamePad 5 FPS, JPEG 70"
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / additional details
+      description: Paste relevant OSReport/Aroma logs and any browser or OBS errors.
+      render: text
