@@ -51,7 +51,7 @@ constexpr WUPSConfigItemMultipleValues::ValuePair LOG_VALUES[] = {
 
 void ApplyRuntimeSettings() {
     if (!gApplicationRunning.load()) return;
-    if (Settings::enabled.load()) Network::Restart(); else Network::Stop();
+    Network::Reconfigure();
 }
 void EnabledChanged(ConfigItemBoolean *, bool v) { Settings::SetEnabled(v); }
 void TvEnabledChanged(ConfigItemBoolean *, bool v) { Settings::SetTvEnabled(v); }
@@ -104,7 +104,7 @@ WUPSConfigAPICallbackStatus ConfigMenuOpened(WUPSConfigCategoryHandle rootHandle
         root.add(WUPSConfigItemMultipleValues::CreateFromValue(Settings::KEY_GAMEPAD_RESOLUTION, "GamePad output resolution", Settings::DEFAULT_GAMEPAD_RESOLUTION, Settings::gamepadResolution.load(), RESOLUTION_VALUES, ResolutionChanged));
 
         root.add(WUPSConfigItemStub::Create("Performance"));
-        root.add(WUPSConfigItemIntegerRange::Create(Settings::KEY_JPEG_QUALITY, "JPEG quality", Settings::DEFAULT_JPEG_QUALITY, Settings::jpegQuality.load(), 10, 95, QualityChanged));
+        root.add(WUPSConfigItemIntegerRange::Create(Settings::KEY_JPEG_QUALITY, "JPEG quality", Settings::DEFAULT_JPEG_QUALITY, Settings::jpegQuality.load(), 35, 85, QualityChanged));
         root.add(WUPSConfigItemBoolean::Create(Settings::KEY_ADAPTIVE_FPS, "Adaptive FPS", Settings::DEFAULT_ADAPTIVE_FPS, Settings::adaptiveFps.load(), AdaptiveChanged));
         root.add(WUPSConfigItemBoolean::Create(Settings::KEY_WATCHDOG_ENABLED, "Health watchdog", Settings::DEFAULT_WATCHDOG_ENABLED, Settings::watchdogEnabled.load(), WatchdogChanged));
 

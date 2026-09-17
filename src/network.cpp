@@ -11,6 +11,7 @@
 #include <coreinit/thread.h>
 #include <nn/ac.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -33,14 +34,25 @@
 namespace {
 constexpr size_t MAX_REQUEST_BYTES = 8192;
 constexpr size_t MAX_CLIENTS_PER_PORT = 8;
+constexpr int CLIENT_TIMEOUT_SECONDS = 3;
 constexpr const char *MJPEG_BOUNDARY = "wiiuframe";
 
 enum class ListenerKind { Web, TV, GamePad };
 struct HttpRequest { std::string method; std::string path; std::string query; };
 
+bool WaitForSocket(int socketFd, bool writable) {
+    fd_set readSet; fd_set writeSet;
+    FD_ZERO(&readSet); FD_ZERO(&writeSet);
+    if (writable) FD_SET(socketFd, &writeSet); else FD_SET(socketFd, &readSet);
+    timeval timeout{}; timeout.tv_sec = CLIENT_TIMEOUT_SECONDS; timeout.tv_usec = 0;
+    const int result = select(socketFd + 1, writable ? nullptr : &readSet, writable ? &writeSet : nullptr, nullptr, &timeout);
+    return result > 0;
+}
+
 bool SendAll(int socketFd, const void *data, size_t size) {
     const auto *bytes = static_cast<const uint8_t *>(data); size_t sentTotal = 0;
     while (sentTotal < size) {
+        if (!WaitForSocket(socketFd, true)) return false;
         const ssize_t sent = send(socketFd, bytes + sentTotal, size - sentTotal, MSG_NOSIGNAL);
         if (sent <= 0) return false;
         sentTotal += static_cast<size_t>(sent);
@@ -67,6 +79,7 @@ void SendBinaryResponse(int socketFd, const char *contentType, const uint8_t *da
 bool ReadRequest(int socketFd, HttpRequest &request) {
     std::string buffer; buffer.reserve(1024); std::array<char, 512> chunk{};
     while (buffer.size() < MAX_REQUEST_BYTES) {
+        if (!WaitForSocket(socketFd, false)) return false;
         const ssize_t received = recv(socketFd, chunk.data(), chunk.size(), 0); if (received <= 0) return false;
         buffer.append(chunk.data(), static_cast<size_t>(received));
         const size_t lineEnd = buffer.find("\r\n"); if (lineEnd == std::string::npos) continue;
@@ -195,7 +208,7 @@ private:
             << "\",\"adaptiveFps\":" << (Settings::adaptiveFps.load() ? "true" : "false") << ",\"authEnabled\":" << (Settings::authEnabled.load() ? "true" : "false")
             << ",\"ports\":{\"web\":" << Settings::webPort.load() << ",\"tv\":" << Settings::tvPort.load() << ",\"gamepad\":" << Settings::gamepadPort.load() << "},\"listeners\":{"
             << "\"web\":\"" << (gWebPtr ? gWebPtr->StateText() : "unknown") << "\",\"tv\":\"" << (gTVPtr ? gTVPtr->StateText() : "unknown") << "\",\"gamepad\":\"" << (gGamePadPtr ? gGamePadPtr->StateText() : "unknown") << "\"},"
-            << "\"jpegQuality\":" << Settings::jpegQuality.load() << ",\"tv\":" << JsonSource(VideoSource::TV) << ",\"gamepad\":" << JsonSource(VideoSource::GamePad) << "}";
+            << "\"uptimeMs\":" << Network::UptimeMs() << ",\"jpegQuality\":" << Settings::jpegQuality.load() << ",\"tv\":" << JsonSource(VideoSource::TV) << ",\"gamepad\":" << JsonSource(VideoSource::GamePad) << "}";
         return out.str();
     }
 
@@ -276,6 +289,7 @@ const host=location.hostname, auth=)HTML" << (auth.empty() ? "''" : "'" + auth +
 };
 
 std::atomic_bool gNetworkRunning{false}; std::mutex gLifecycleMutex;
+std::chrono::steady_clock::time_point gNetworkStarted{};
 Listener gWeb{ListenerKind::Web}; Listener gTV{ListenerKind::TV}; Listener gGamePad{ListenerKind::GamePad};
 
 } // namespace
@@ -294,15 +308,43 @@ bool Start() {
     const bool tv = gTV.Start(static_cast<uint16_t>(Settings::tvPort.load()));
     const bool gp = gGamePad.Start(static_cast<uint16_t>(Settings::gamepadPort.load()));
     gNetworkRunning.store(web || tv || gp);
+    if (gNetworkRunning.load()) gNetworkStarted = std::chrono::steady_clock::now();
     Log::Info("network start: web=%d tv=%d gamepad=%d", web, tv, gp);
     return gNetworkRunning.load();
 }
 void Stop() {
     std::lock_guard<std::mutex> lock(gLifecycleMutex); if (!gNetworkRunning.exchange(false) && !gWeb.IsRunning() && !gTV.IsRunning() && !gGamePad.IsRunning()) return;
-    FrameStore::NotifyAll(); gWeb.Stop(); gTV.Stop(); gGamePad.Stop(); Log::Info("network stopped");
+    FrameStore::NotifyAll(); gWeb.Stop(); gTV.Stop(); gGamePad.Stop(); gNetworkStarted = {}; Log::Info("network stopped");
 }
 void Restart() { Stop(); Start(); }
+
+void Reconfigure() {
+    std::lock_guard<std::mutex> lock(gLifecycleMutex);
+    if (!Settings::enabled.load()) {
+        gWeb.Stop(); gTV.Stop(); gGamePad.Stop();
+        gNetworkRunning.store(false);
+        gNetworkStarted = {};
+        return;
+    }
+    if (!Settings::PortsAreValid()) { Log::Error("ports invalid or duplicated"); return; }
+    auto ensure = [](Listener &listener, uint16_t desiredPort) {
+        if (listener.IsRunning() && listener.Port() != desiredPort) listener.Stop();
+        if (!listener.IsRunning()) listener.Start(desiredPort);
+    };
+    ensure(gWeb, static_cast<uint16_t>(Settings::webPort.load()));
+    ensure(gTV, static_cast<uint16_t>(Settings::tvPort.load()));
+    ensure(gGamePad, static_cast<uint16_t>(Settings::gamepadPort.load()));
+    const bool any = gWeb.IsRunning() || gTV.IsRunning() || gGamePad.IsRunning();
+    if (any && !gNetworkRunning.load()) gNetworkStarted = std::chrono::steady_clock::now();
+    gNetworkRunning.store(any);
+}
+
+void EnsureListeners() { Reconfigure(); }
 bool IsRunning() { return gNetworkRunning.load(); }
+uint64_t UptimeMs() {
+    if (!gNetworkRunning.load() || gNetworkStarted.time_since_epoch().count() == 0) return 0;
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gNetworkStarted).count());
+}
 std::string ListenerStatusSummary() {
     std::ostringstream out; out << "W:" << gWeb.StateText() << " T:" << gTV.StateText() << " G:" << gGamePad.StateText(); return out.str();
 }

@@ -136,7 +136,7 @@ void SetTvEnabled(bool value) { StoreValue(KEY_TV_ENABLED, tvEnabled, value); }
 void SetGamePadEnabled(bool value) { StoreValue(KEY_GAMEPAD_ENABLED, gamepadEnabled, value); }
 void SetTvFps(int value, bool markCustom) { StoreValue(KEY_TV_FPS, tvFps, std::clamp(value, 1, 15)); if (markCustom) MarkCustom(); }
 void SetGamePadFps(int value, bool markCustom) { StoreValue(KEY_GAMEPAD_FPS, gamepadFps, std::clamp(value, 1, 15)); if (markCustom) MarkCustom(); }
-void SetJpegQuality(int value, bool markCustom) { StoreValue(KEY_JPEG_QUALITY, jpegQuality, std::clamp(value, 10, 95)); if (markCustom) MarkCustom(); }
+void SetJpegQuality(int value, bool markCustom) { StoreValue(KEY_JPEG_QUALITY, jpegQuality, std::clamp(value, 35, 85)); if (markCustom) MarkCustom(); }
 void SetTvResolution(int value, bool markCustom) { StoreValue(KEY_TV_RESOLUTION, tvResolution, std::clamp(value, 0, 3)); if (markCustom) MarkCustom(); }
 void SetGamePadResolution(int value, bool markCustom) { StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, std::clamp(value, 0, 3)); if (markCustom) MarkCustom(); }
 void SetAdaptiveFps(bool value) { StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, value); }

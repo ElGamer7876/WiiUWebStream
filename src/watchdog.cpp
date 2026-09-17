@@ -4,6 +4,7 @@
 #include "metrics.hpp"
 #include "settings.hpp"
 #include "log.hpp"
+#include "network.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -25,10 +26,12 @@ void Check(VideoSource source) {
 }
 
 void Loop() {
+    unsigned networkTick = 0;
     while (gRunning.load()) {
         if (Settings::watchdogEnabled.load()) {
             if (Settings::tvEnabled.load()) Check(VideoSource::TV);
             if (Settings::gamepadEnabled.load()) Check(VideoSource::GamePad);
+            if (++networkTick >= 5) { networkTick = 0; Network::EnsureListeners(); }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
