@@ -109,7 +109,7 @@ void ApplyPreset(Preset value) {
             StoreValue(KEY_TV_FPS, tvFps, 5);
             StoreValue(KEY_GAMEPAD_FPS, gamepadFps, 5);
             StoreValue(KEY_JPEG_QUALITY, jpegQuality, 85);
-            StoreValue(KEY_TV_RESOLUTION, tvResolution, static_cast<int>(Resolution::R1280x720));
+            StoreValue(KEY_TV_RESOLUTION, tvResolution, static_cast<int>(Resolution::R960x540));
             StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, static_cast<int>(Resolution::R854x480));
             StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, true);
             break;
@@ -117,7 +117,7 @@ void ApplyPreset(Preset value) {
             StoreValue(KEY_TV_FPS, tvFps, 10);
             StoreValue(KEY_GAMEPAD_FPS, gamepadFps, 8);
             StoreValue(KEY_JPEG_QUALITY, jpegQuality, 72);
-            StoreValue(KEY_TV_RESOLUTION, tvResolution, static_cast<int>(Resolution::R1280x720));
+            StoreValue(KEY_TV_RESOLUTION, tvResolution, static_cast<int>(Resolution::R960x540));
             StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, static_cast<int>(Resolution::R854x480));
             StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, true);
             break;
@@ -137,8 +137,8 @@ void SetGamePadEnabled(bool value) { StoreValue(KEY_GAMEPAD_ENABLED, gamepadEnab
 void SetTvFps(int value, bool markCustom) { StoreValue(KEY_TV_FPS, tvFps, std::clamp(value, 1, 15)); if (markCustom) MarkCustom(); }
 void SetGamePadFps(int value, bool markCustom) { StoreValue(KEY_GAMEPAD_FPS, gamepadFps, std::clamp(value, 1, 15)); if (markCustom) MarkCustom(); }
 void SetJpegQuality(int value, bool markCustom) { StoreValue(KEY_JPEG_QUALITY, jpegQuality, std::clamp(value, 10, 95)); if (markCustom) MarkCustom(); }
-void SetTvResolution(int value, bool markCustom) { StoreValue(KEY_TV_RESOLUTION, tvResolution, std::clamp(value, 0, 4)); if (markCustom) MarkCustom(); }
-void SetGamePadResolution(int value, bool markCustom) { StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, std::clamp(value, 0, 4)); if (markCustom) MarkCustom(); }
+void SetTvResolution(int value, bool markCustom) { StoreValue(KEY_TV_RESOLUTION, tvResolution, std::clamp(value, 0, 3)); if (markCustom) MarkCustom(); }
+void SetGamePadResolution(int value, bool markCustom) { StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, std::clamp(value, 0, 3)); if (markCustom) MarkCustom(); }
 void SetAdaptiveFps(bool value) { StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, value); }
 void SetAuthEnabled(bool value) { StoreValue(KEY_AUTH_ENABLED, authEnabled, value); }
 void SetAuthCode(int value) { StoreValue(KEY_AUTH_CODE, authCode, std::clamp(value, 0, 999999)); }
@@ -155,12 +155,11 @@ bool PortsAreValid() {
 
 void OutputDimensions(bool gamePad, uint32_t &width, uint32_t &height) {
     const int value = gamePad ? gamepadResolution.load() : tvResolution.load();
-    switch (static_cast<Resolution>(std::clamp(value, 0, 4))) {
+    switch (static_cast<Resolution>(std::clamp(value, 0, 3))) {
         case Resolution::R426x240: width = 426; height = 240; break;
         case Resolution::R640x360: width = 640; height = 360; break;
         case Resolution::R854x480: width = 854; height = 480; break;
         case Resolution::R960x540: width = 960; height = 540; break;
-        case Resolution::R1280x720: width = 1280; height = 720; break;
     }
 }
 
@@ -175,12 +174,11 @@ const char *PresetName() {
 }
 
 const char *ResolutionName(int value) {
-    switch (static_cast<Resolution>(std::clamp(value, 0, 4))) {
+    switch (static_cast<Resolution>(std::clamp(value, 0, 3))) {
         case Resolution::R426x240: return "426x240";
         case Resolution::R640x360: return "640x360";
         case Resolution::R854x480: return "854x480";
         case Resolution::R960x540: return "960x540";
-        case Resolution::R1280x720: return "1280x720";
     }
     return "unknown";
 }
