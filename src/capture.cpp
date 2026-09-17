@@ -75,7 +75,7 @@ std::atomic_bool gHaveLastTV{false};
 std::atomic_bool gHaveLastGamePad{false};
 
 CaptureContext &ContextFor(VideoSource source) { return source == VideoSource::TV ? gTVContext : gGamePadContext; }
-int TargetFps(VideoSource source) { return std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(), 1, 15); }
+int TargetFps(VideoSource source) { return std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(), 1, Settings::HighRiskAccepted() ? 60 : 15); }
 bool SourceEnabled(VideoSource source) {
     if (!Settings::enabled.load()) return false;
     return source == VideoSource::TV ? Settings::tvEnabled.load() : Settings::gamepadEnabled.load();
@@ -225,7 +225,7 @@ bool EncodeContext(tjhandle compressor, CaptureContext &context, std::vector<uin
     if (!BuildScaledRgba(context, rgbaScratch, outputWidth, outputHeight, input, inputPitch)) { Metrics::EncodeFailure(context.source); return false; }
     const auto scaleEnd = std::chrono::steady_clock::now();
 
-    const int quality = std::clamp(Settings::jpegQuality.load(), 10, 95);
+    const int quality = std::clamp(Settings::jpegQuality.load(), 35, Settings::HighRiskAccepted() ? 95 : 85);
     const unsigned long maximumSize = tjBufSize(static_cast<int>(outputWidth), static_cast<int>(outputHeight), TJSAMP_420);
     if (maximumSize == 0) { Metrics::EncodeFailure(context.source); return false; }
     std::vector<uint8_t> jpeg(maximumSize); unsigned char *jpegPointer = jpeg.data(); unsigned long jpegSize = maximumSize;
@@ -291,7 +291,7 @@ void MaybeCapture(VideoSource source, const GX2ColorBuffer *colorBuffer, GX2Surf
     CaptureContext &context = ContextFor(source);
     const bool hasStreamClients = FrameStore::ClientCount(source) > 0;
     const bool oneShot = context.oneShotRequested.load();
-    if (!hasStreamClients && !oneShot) return;
+    if (!hasStreamClients && !oneShot && !(Settings::HighRiskAccepted() && Settings::continuousCapture.load())) return;
 
     Metrics::CaptureAttempt(source);
     const uint64_t now = OSGetTime();
