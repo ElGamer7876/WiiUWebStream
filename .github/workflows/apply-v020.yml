@@ -1,0 +1,42 @@
+name: Apply v0.2.0-dev
+
+on:
+  push:
+    branches: [feature/v0.2.0-dev]
+    paths:
+      - '.github/workflows/apply-v020.yml'
+      - '.bootstrap/v020-changes.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct changes
+        run: |
+          base64 -d .bootstrap/v020-changes.b64 > /tmp/v020-changes.tar.gz
+          echo '2aae29d9ce051af3b85d9830b5f2de25125ea6addc2b48b0d828e41612489700  /tmp/v020-changes.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v020-changes.tar.gz -C .
+          rm -rf .bootstrap .github/workflows/apply-v020.yml
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build WUPS plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify output
+        run: test -s WiiUWebStream.wps
+
+      - name: Commit implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git reset WiiUWebStream.wps || true
+          git commit -m 'Implement v0.2.0-dev improvements'
+          git push origin HEAD:feature/v0.2.0-dev
