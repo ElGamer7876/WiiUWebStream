@@ -1,0 +1,40 @@
+name: Apply feature v0.2.0-dev
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/apply-feature-v020.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  apply-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.2.0-dev
+          fetch-depth: 0
+
+      - name: Apply bundled source changes
+        run: |
+          base64 -d .bootstrap/v020-changes.b64 > /tmp/v020-changes.tar.gz
+          echo '2aae29d9ce051af3b85d9830b5f2de25125ea6addc2b48b0d828e41612489700  /tmp/v020-changes.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v020-changes.tar.gz -C .
+          rm -rf .bootstrap .github/workflows/apply-v020.yml
+
+      - name: Build Wii U plugin
+        run: |
+          docker build -t wiiu-web-stream-builder .
+          docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+          test -s WiiUWebStream.wps
+
+      - name: Commit feature implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git reset WiiUWebStream.wps || true
+          git commit -m 'Implement v0.2.0-dev improvements'
+          git push origin HEAD:feature/v0.2.0-dev
