@@ -1,0 +1,142 @@
+name: Integrate high-risk audio
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.2.0-dev
+          fetch-depth: 0
+
+      - name: Apply high-risk runtime integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # Capture: high-risk FPS/JPEG limits and optional continuous capture.
+          p = Path('src/capture.cpp')
+          s = p.read_text()
+          s = s.replace('int TargetFps(VideoSource source) { return std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(), 1, 15); }',
+                        'int TargetFps(VideoSource source) { return std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(), 1, Settings::HighRiskAccepted() ? 60 : 15); }')
+          s = s.replace('const int quality = std::clamp(Settings::jpegQuality.load(), 10, 95);',
+                        'const int quality = std::clamp(Settings::jpegQuality.load(), 35, Settings::HighRiskAccepted() ? 95 : 85);')
+          s = s.replace('if (!hasStreamClients && !oneShot) return;',
+                        'if (!hasStreamClients && !oneShot && !(Settings::HighRiskAccepted() && Settings::continuousCapture.load())) return;')
+          p.write_text(s)
+
+          # Watchdog: verify the AX callback remains chained while audio is enabled.
+          p = Path('src/watchdog.cpp')
+          s = p.read_text()
+          if '#include "audio.hpp"' not in s:
+              s = s.replace('#include "watchdog.hpp"\n', '#include "watchdog.hpp"\n#include "audio.hpp"\n')
+          s = s.replace('if (++networkTick >= 5) { networkTick = 0; Network::EnsureListeners(); }',
+                        'if (++networkTick >= 5) { networkTick = 0; Network::EnsureListeners(); Audio::EnsureCallbacks(); }')
+          p.write_text(s)
+
+          # Main WUPS configuration and runtime lifecycle.
+          p = Path('src/main.cpp')
+          s = p.read_text()
+          if '#include "audio.hpp"' not in s:
+              s = s.replace('#include "capture.hpp"\n', '#include "capture.hpp"\n#include "audio.hpp"\n')
+
+          old_res = '''constexpr WUPSConfigItemMultipleValues::ValuePair RESOLUTION_VALUES[] = {\n    {static_cast<uint32_t>(Settings::Resolution::R426x240), "426x240"},\n    {static_cast<uint32_t>(Settings::Resolution::R640x360), "640x360"},\n    {static_cast<uint32_t>(Settings::Resolution::R854x480), "854x480"},\n    {static_cast<uint32_t>(Settings::Resolution::R960x540), "960x540"},\n};'''
+          new_res = '''constexpr WUPSConfigItemMultipleValues::ValuePair RESOLUTION_VALUES[] = {\n    {static_cast<uint32_t>(Settings::Resolution::R426x240), "426x240"},\n    {static_cast<uint32_t>(Settings::Resolution::R640x360), "640x360"},\n    {static_cast<uint32_t>(Settings::Resolution::R854x480), "854x480"},\n    {static_cast<uint32_t>(Settings::Resolution::R960x540), "960x540"},\n};\nconstexpr WUPSConfigItemMultipleValues::ValuePair HIGH_RISK_RESOLUTION_VALUES[] = {\n    {static_cast<uint32_t>(Settings::Resolution::R426x240), "426x240"},\n    {static_cast<uint32_t>(Settings::Resolution::R640x360), "640x360"},\n    {static_cast<uint32_t>(Settings::Resolution::R854x480), "854x480"},\n    {static_cast<uint32_t>(Settings::Resolution::R960x540), "960x540"},\n    {static_cast<uint32_t>(Settings::Resolution::R1280x720), "1280x720 (HIGH RISK)"},\n    {static_cast<uint32_t>(Settings::Resolution::R1920x1080), "1920x1080 (HIGH RISK)"},\n};'''
+          s = s.replace(old_res, new_res)
+
+          if 'void HighRiskEnabledChanged' not in s:
+              s = s.replace('void WatchdogChanged(ConfigItemBoolean *, bool v) { Settings::SetWatchdogEnabled(v); }', '''void WatchdogChanged(ConfigItemBoolean *, bool v) { Settings::SetWatchdogEnabled(v); }\nvoid HighRiskEnabledChanged(ConfigItemBoolean *, bool v) { Settings::SetHighRiskEnabled(v); }\nvoid HighRiskAcceptedChanged(ConfigItemBoolean *, bool v) { Settings::SetHighRiskAccepted(v); }\nvoid AudioStreamingChanged(ConfigItemBoolean *, bool v) { Settings::SetAudioStreaming(v); }\nvoid ContinuousCaptureChanged(ConfigItemBoolean *, bool v) { Settings::SetContinuousCapture(v); }''')
+
+          s = s.replace('void ConfigMenuClosed() { Settings::Save(); ApplyRuntimeSettings(); }',
+                        'void ConfigMenuClosed() { Settings::EnforceSafeLimits(); Settings::Save(); Audio::ApplySettings(); ApplyRuntimeSettings(); }')
+
+          security_marker = '        root.add(WUPSConfigItemMultipleValues::CreateFromValue(Settings::KEY_LOG_LEVEL, "Log level", Settings::DEFAULT_LOG_LEVEL, Settings::logLevel.load(), LOG_VALUES, LogLevelChanged));'
+          high_risk_ui = '''        root.add(WUPSConfigItemMultipleValues::CreateFromValue(Settings::KEY_LOG_LEVEL, "Log level", Settings::DEFAULT_LOG_LEVEL, Settings::logLevel.load(), LOG_VALUES, LogLevelChanged));\n\n        root.add(WUPSConfigItemStub::Create("Advanced / Experimental"));\n        root.add(WUPSConfigItemBoolean::Create(Settings::KEY_HIGH_RISK_ENABLED, "Enable high-risk actions", Settings::DEFAULT_HIGH_RISK_ENABLED, Settings::highRiskEnabled.load(), HighRiskEnabledChanged));\n        root.add(WUPSConfigItemBoolean::Create(Settings::KEY_HIGH_RISK_ACCEPTED, "I understand and accept the risk", Settings::DEFAULT_HIGH_RISK_ACCEPTED, Settings::highRiskAccepted.load(), HighRiskAcceptedChanged));\n        root.add(WUPSConfigItemStub::Create("WARNING: High-risk actions may increase CPU/GPU/memory/network/SD load and may freeze or crash the console."));\n        if (Settings::HighRiskAccepted()) {\n            root.add(WUPSConfigItemStub::Create("High-risk overrides (HIGH RISK)"));\n            root.add(WUPSConfigItemIntegerRange::Create("highRiskTvFps", "TV target FPS override (HIGH RISK)", Settings::DEFAULT_TV_FPS, Settings::tvFps.load(), 1, 60, FpsChanged));\n            root.add(WUPSConfigItemIntegerRange::Create("highRiskGamePadFps", "GamePad target FPS override (HIGH RISK)", Settings::DEFAULT_GAMEPAD_FPS, Settings::gamepadFps.load(), 1, 60, FpsChanged));\n            root.add(WUPSConfigItemIntegerRange::Create("highRiskJpegQuality", "JPEG quality override (HIGH RISK)", Settings::DEFAULT_JPEG_QUALITY, Settings::jpegQuality.load(), 35, 95, QualityChanged));\n            root.add(WUPSConfigItemMultipleValues::CreateFromValue("highRiskTvResolution", "TV output resolution override (HIGH RISK)", Settings::DEFAULT_TV_RESOLUTION, Settings::tvResolution.load(), HIGH_RISK_RESOLUTION_VALUES, ResolutionChanged));\n            root.add(WUPSConfigItemMultipleValues::CreateFromValue("highRiskGamePadResolution", "GamePad output resolution override (HIGH RISK)", Settings::DEFAULT_GAMEPAD_RESOLUTION, Settings::gamepadResolution.load(), HIGH_RISK_RESOLUTION_VALUES, ResolutionChanged));\n            root.add(WUPSConfigItemBoolean::Create(Settings::KEY_AUDIO_STREAMING, "Audio streaming (HIGH RISK)", Settings::DEFAULT_AUDIO_STREAMING, Settings::audioStreaming.load(), AudioStreamingChanged));\n            root.add(WUPSConfigItemBoolean::Create(Settings::KEY_CONTINUOUS_CAPTURE, "Continuous capture without viewers (HIGH RISK)", Settings::DEFAULT_CONTINUOUS_CAPTURE, Settings::continuousCapture.load(), ContinuousCaptureChanged));\n            root.add(WUPSConfigItemStub::Create("H.264 streaming (HIGH RISK) - Not available in this build."));\n            root.add(WUPSConfigItemStub::Create("mDNS discovery (HIGH RISK) - Not available in this build."));\n            root.add(WUPSConfigItemStub::Create("Close and reopen this menu after changing the high-risk acceptance switches."));\n        }'''
+          s = s.replace(security_marker, high_risk_ui)
+
+          # The high-risk duplicate identifiers need routing to the same underlying settings.
+          s = s.replace('if (id == Settings::KEY_TV_FPS) Settings::SetTvFps(value);\n    else if (id == Settings::KEY_GAMEPAD_FPS) Settings::SetGamePadFps(value);',
+                        'if (id == Settings::KEY_TV_FPS || id == "highRiskTvFps") Settings::SetTvFps(value);\n    else if (id == Settings::KEY_GAMEPAD_FPS || id == "highRiskGamePadFps") Settings::SetGamePadFps(value);')
+          s = s.replace('if (id == Settings::KEY_TV_RESOLUTION) Settings::SetTvResolution(static_cast<int>(value));\n    else if (id == Settings::KEY_GAMEPAD_RESOLUTION) Settings::SetGamePadResolution(static_cast<int>(value));',
+                        'if (id == Settings::KEY_TV_RESOLUTION || id == "highRiskTvResolution") Settings::SetTvResolution(static_cast<int>(value));\n    else if (id == Settings::KEY_GAMEPAD_RESOLUTION || id == "highRiskGamePadResolution") Settings::SetGamePadResolution(static_cast<int>(value));')
+
+          s = s.replace('if (!Capture::Start()) Log::Error("capture startup failed");\n    Watchdog::Start();',
+                        'if (!Capture::Start()) Log::Error("capture startup failed");\n    Audio::Start();\n    Watchdog::Start();')
+          s = s.replace('Watchdog::Stop(); Network::Stop(); Capture::Stop();',
+                        'Watchdog::Stop(); Network::Stop(); Audio::Stop(); Capture::Stop();')
+          p.write_text(s)
+
+          # Network: WAV audio streaming, status, English UI, OBS audio.
+          p = Path('src/network.cpp')
+          s = p.read_text()
+          if '#include "audio.hpp"' not in s:
+              s = s.replace('#include "network.hpp"\n', '#include "network.hpp"\n\n#include "audio.hpp"\n')
+
+          # Status JSON audio fields.
+          old_status = '<< "\\\"uptimeMs\\\":" << Network::UptimeMs() << ",\\\"jpegQuality\\\":" << Settings::jpegQuality.load() << ",\\\"tv\\\":" << JsonSource(VideoSource::TV) << ",\\\"gamepad\\\":" << JsonSource(VideoSource::GamePad) << "}";'
+          new_status = '''<< "\\\"uptimeMs\\\":" << Network::UptimeMs() << ",\\\"jpegQuality\\\":" << Settings::jpegQuality.load()\n            << ",\\\"highRiskEnabled\\\":" << (Settings::HighRiskAccepted() ? "true" : "false")\n            << ",\\\"audioEnabled\\\":" << (Audio::IsActive() ? "true" : "false")\n            << ",\\\"tvAudioClients\\\":" << Audio::GetStats(Audio::Source::TV).clients\n            << ",\\\"gamepadAudioClients\\\":" << Audio::GetStats(Audio::Source::GamePad).clients\n            << ",\\\"tv\\\":" << JsonSource(VideoSource::TV) << ",\\\"gamepad\\\":" << JsonSource(VideoSource::GamePad) << "}";'''
+          s = s.replace(old_status, new_status)
+
+          # English-visible dashboard strings.
+          s = s.replace('<html lang="es">', '<html lang="en">')
+          s = s.replace('Pausar/Reanudar', 'Pause/Resume')
+          s = s.replace('Copiar URL', 'Copy URL')
+          s = s.replace('${s.tv.clients} clientes', '${s.tv.clients} clients')
+          s = s.replace('${s.gamepad.clients} clientes', '${s.gamepad.clients} clients')
+          s = s.replace('<strong>Diagnóstico:</strong>', '<strong>Diagnostics:</strong>')
+          s = s.replace('Aroma/WUPS · v0.2.0-dev · LAN only · MJPEG', 'Aroma/WUPS · v0.2.0-dev · LAN only · MJPEG + optional PCM audio')
+
+          # WAV helpers before Listener declaration.
+          marker = 'class Listener;\nListener *gWebPtr = nullptr;'
+          if 'BuildWavHeader' not in s:
+              helper = r'''void PutLe16(uint8_t *p, uint16_t v) { p[0] = static_cast<uint8_t>(v); p[1] = static_cast<uint8_t>(v >> 8); }\nvoid PutLe32(uint8_t *p, uint32_t v) { p[0] = static_cast<uint8_t>(v); p[1] = static_cast<uint8_t>(v >> 8); p[2] = static_cast<uint8_t>(v >> 16); p[3] = static_cast<uint8_t>(v >> 24); }\nstd::array<uint8_t, 44> BuildWavHeader(uint32_t sampleRate) {\n    std::array<uint8_t, 44> h{};\n    std::memcpy(h.data(), "RIFF", 4); PutLe32(h.data()+4, 0xFFFFFFFFu); std::memcpy(h.data()+8, "WAVEfmt ", 8);\n    PutLe32(h.data()+16, 16); PutLe16(h.data()+20, 1); PutLe16(h.data()+22, 2); PutLe32(h.data()+24, sampleRate);\n    PutLe32(h.data()+28, sampleRate * 4); PutLe16(h.data()+32, 4); PutLe16(h.data()+34, 16);\n    std::memcpy(h.data()+36, "data", 4); PutLe32(h.data()+40, 0xFFFFFFFFu); return h;\n}\n\n'''
+              s = s.replace(marker, helper + marker)
+
+          # Insert ServeAudioWav before HandleWeb.
+          marker = '    void HandleWeb(int fd, const HttpRequest &r) {'
+          if 'void ServeAudioWav' not in s:
+              audio_method = r'''    void ServeAudioWav(int fd, Audio::Source source) {\n        if (!Settings::HighRiskAccepted() || !Settings::audioStreaming.load() || !Audio::IsActive()) {\n            SendResponse(fd, 503, "Service Unavailable", "text/plain; charset=utf-8", "Audio streaming is disabled. Enable and accept high-risk actions first.\\n");\n            return;\n        }\n        Audio::ClientConnected(source);\n        uint64_t sequence = 0; Audio::Packet packet{};\n        for (int i = 0; i < 200 && !Audio::ReadAfter(source, sequence, packet); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));\n        if (packet.sampleRate == 0) { Audio::ClientDisconnected(source); SendResponse(fd, 503, "Service Unavailable", "text/plain; charset=utf-8", "No audio frame available yet.\\n"); return; }\n        const auto wav = BuildWavHeader(packet.sampleRate);\n        std::string header = "HTTP/1.1 200 OK\\r\\nServer: WiiUWebStream/0.2\\r\\nConnection: close\\r\\nCache-Control: no-store\\r\\nAccess-Control-Allow-Origin: *\\r\\nContent-Type: audio/wav\\r\\n\\r\\n";\n        bool ok = SendAll(fd, header) && SendAll(fd, wav.data(), wav.size()) && SendAll(fd, packet.pcm.data(), packet.bytes);\n        while (ok && mRunning.load() && Network::IsRunning() && Audio::IsActive()) {\n            Audio::Packet next{};\n            if (!Audio::ReadAfter(source, sequence, next)) { std::this_thread::sleep_for(std::chrono::milliseconds(2)); continue; }\n            ok = SendAll(fd, next.pcm.data(), next.bytes);\n        }\n        Audio::ClientDisconnected(source);\n    }\n\n'''
+              s = s.replace(marker, audio_method + marker)
+
+          # Routes.
+          s = s.replace('if (r.path == "/snapshot/tv.jpg") { ServeSnapshot(fd, VideoSource::TV); return; }',
+                        'if (r.path == "/audio/tv.wav") { ServeAudioWav(fd, Audio::Source::TV); return; }\n        if (r.path == "/audio/gamepad.wav") { ServeAudioWav(fd, Audio::Source::GamePad); return; }\n        if (r.path == "/snapshot/tv.jpg") { ServeSnapshot(fd, VideoSource::TV); return; }')
+          s = s.replace('if (r.path == "/snapshot.jpg") { ServeSnapshot(fd, source); return; }',
+                        'if (r.path == "/audio.wav") { ServeAudioWav(fd, source == VideoSource::TV ? Audio::Source::TV : Audio::Source::GamePad); return; }\n        if (r.path == "/snapshot.jpg") { ServeSnapshot(fd, source); return; }')
+
+          # Add audio to OBS single-source pages and TV audio to dual page.
+          old = '<< "/stream.mjpg" << AuthSuffix(request) << "\\\"></body></html>";'
+          new = '<< "/stream.mjpg" << AuthSuffix(request) << "\\\"><audio autoplay src=\\\"/audio/" << (source == VideoSource::TV ? "tv" : "gamepad") << ".wav" << AuthSuffix(request) << "\\\"></audio></body></html>";'
+          s = s.replace(old, new)
+          old_dual = '<< auth << "\\\"><img class=\\\"gp\\\" src=\\\"http://" << Network::ConsoleIpAddress() << ":" << Settings::gamepadPort.load() << "/stream.mjpg" << auth << "\\\"></body></html>";'
+          new_dual = '<< auth << "\\\"><img class=\\\"gp\\\" src=\\\"http://" << Network::ConsoleIpAddress() << ":" << Settings::gamepadPort.load() << "/stream.mjpg" << auth << "\\\"><audio autoplay src=\\\"/audio/tv.wav" << auth << "\\\"></audio></body></html>";'
+          s = s.replace(old_dual, new_dual)
+
+          # Dashboard audio controls in English.
+          s = s.replace('<strong>Diagnostics:</strong> <code>/api/status</code>', '<strong>Audio (HIGH RISK)</strong>: <audio controls preload="none" src="/audio/tv.wav"></audio> TV · <audio controls preload="none" src="/audio/gamepad.wav"></audio> GamePad<br><strong>Diagnostics:</strong> <code>/api/status</code>')
+          p.write_text(s)
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify plugin
+        run: test -s WiiUWebStream.wps
+
+      - name: Commit validated high-risk audio integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src Makefile
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Implement high-risk audio streaming and overrides"
+          git push origin HEAD:feature/v0.2.0-dev
