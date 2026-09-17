@@ -39,7 +39,7 @@ CXXFLAGS += -DDEBUG -g
 CFLAGS   += -DDEBUG -g
 endif
 
-LIBS    := -lwups -lwut -lturbojpeg -lmappedmemory -lm
+LIBS    := -lwups -lwut -lsndcore2 -lturbojpeg -lmappedmemory -lm
 LIBDIRS := $(PORTLIBS) $(WUPS_ROOT) $(WUT_ROOT) $(WUMS_ROOT)
 
 #-------------------------------------------------------------------------------
