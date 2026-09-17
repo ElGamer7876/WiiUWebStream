@@ -4,6 +4,9 @@ A Wii U **Aroma/WUPS plugin** that streams the TV and GamePad outputs over your 
 
 > `v0.2.0-dev` is a **pre-release development build**. TV and GamePad streaming have now been confirmed on a physical Wii U, but audio, high-risk overrides and broad game compatibility still need more hardware testing before a stable release.
 
+> [!WARNING]
+> Installing and using this plugin can cause the Wii U to **freeze during gameplay**. In some cases the console may stop responding completely and require a **forced power-off** by holding the console's POWER button. A forced shutdown can cause loss of unsaved progress and may increase the risk of data or filesystem corruption. Use this development build at your own risk, save your game frequently, and avoid testing HIGH RISK options when important unsaved data is open.
+
 ## Important: WUPS config memory warning
 
 During physical Wii U testing, the original full WUPS configuration menu could run out of memory while Aroma was rendering the large number of settings.
@@ -86,7 +89,7 @@ The current high-risk section can expose:
 - **Audio streaming (HIGH RISK)**.
 - **Continuous capture without viewers (HIGH RISK)**.
 
-These are experimental, not recommended defaults. They can sharply increase CPU, GPU, mapped-memory, encoder and network load and can reduce game performance or freeze/crash the console.
+These are experimental, not recommended defaults. They can sharply increase CPU, GPU, mapped-memory, encoder and network load and can reduce game performance or freeze/crash the console. A freeze may happen **in the middle of a game** and can require a forced shutdown of the Wii U.
 
 Disabling either high-risk confirmation switch automatically returns FPS, JPEG quality and resolutions to the safe range and disables high-risk audio/continuous capture.
 
@@ -261,6 +264,8 @@ The current `v0.2.0-dev` source successfully cross-compiles with the pinned devk
 A first physical Wii U test has confirmed that the dashboard loads and both TV and GamePad video streams can operate simultaneously on real hardware. This is an important milestone, but it does **not** yet establish stability across games, long sessions, audio correctness, high-risk resolutions/FPS, or every Aroma environment.
 
 The WUPS-menu memory issue discovered during that test is the reason full configuration has been moved to the Web Settings page and capture/audio are paused while the minimal WUPS menu is open.
+
+This remains development software: even with normal settings, users should assume a possible mid-game freeze and be prepared for a forced console shutdown. Testing should be done after saving progress and preferably without important unsaved work open.
 
 ## Intentionally deferred
 
