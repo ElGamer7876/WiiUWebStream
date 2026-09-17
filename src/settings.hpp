@@ -27,9 +27,9 @@ inline constexpr int DEFAULT_TV_FPS           = 5;
 inline constexpr int DEFAULT_GAMEPAD_FPS      = 5;
 inline constexpr int DEFAULT_JPEG_QUALITY     = 70;
 
-inline constexpr uint32_t TV_OUTPUT_WIDTH       = 640;
-inline constexpr uint32_t TV_OUTPUT_HEIGHT      = 360;
-inline constexpr uint32_t GAMEPAD_OUTPUT_WIDTH  = 854;
+inline constexpr uint32_t TV_OUTPUT_WIDTH      = 640;
+inline constexpr uint32_t TV_OUTPUT_HEIGHT     = 360;
+inline constexpr uint32_t GAMEPAD_OUTPUT_WIDTH = 854;
 inline constexpr uint32_t GAMEPAD_OUTPUT_HEIGHT = 480;
 
 extern std::atomic_bool enabled;
