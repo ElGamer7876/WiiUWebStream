@@ -1,43 +1,23 @@
-# Third-party projects and technical references
+# Third-party references
 
-Wii U Web Stream is developed for the open-source Wii U homebrew ecosystem.
+Wii U Web Stream is GPL-3.0-or-later and was developed against current open-source Wii U/Aroma projects.
 
-## ScreenshotWUPS
+## ScreenshotWUPS (`wiiu-env/ScreenshotWUPS`)
 
-Repository: `wiiu-env/ScreenshotWUPS`
+Primary technical reference for current WUPS/GX2 TV and DRC interception, mapped GX2 memory, surface copy/AA resolve and CPU-side image processing.
 
-Used as the primary technical reference for current Aroma/WUPS GX2 capture patterns, including TV/DRC scan targets, mapped GX2 memory, linear RGBA readback, AA resolve/copy behavior, and the relevant WUPS GX2 hooks.
+## WiiUPluginSystem (`wiiu-env/WiiUPluginSystem`)
 
-## WiiUPluginSystem
+Reference for WUPS lifecycle, storage, configuration API and current C++ configuration items including `WUPSConfigItemMultipleValues`.
 
-Repository: `wiiu-env/WiiUPluginSystem`
+## Ristretto (`wiiu-smarthome/Ristretto`)
 
-Reference for plugin metadata, lifecycle, configuration APIs and `.wps` build rules.
+Reference for sockets/HTTP and background server threading in a modern Aroma plugin.
 
-## libmappedmemory / MemoryMappingModule
+## ftpiiu_plugin (`wiiu-env/ftpiiu_plugin`)
 
-Repository: `wiiu-env/libmappedmemory`
-
-Provides GX2-compatible mapped memory allocation used by the capture buffers.
-
-## ftpiiu_plugin
-
-Repository: `wiiu-env/ftpiiu_plugin`
-
-Reference for `nn::ac` networking and retrieving the Wii U assigned IPv4 address.
-
-## Ristretto
-
-Repository: `wiiu-smarthome/Ristretto`
-
-Reference for a modern HTTP/TCP server running inside an Aroma plugin.
+Reference for `nn::ac` network initialization and retrieving the console's assigned IP address.
 
 ## libjpeg-turbo
 
-Repository: `libjpeg-turbo/libjpeg-turbo`
-
-TurboJPEG API is used to encode in-memory RGBA frames as JPEG.
-
-## Licensing
-
-Each third-party project remains subject to its own license. Wii U Web Stream itself is distributed under `GPL-3.0-or-later`.
+TurboJPEG is used to encode JPEG frames in memory.

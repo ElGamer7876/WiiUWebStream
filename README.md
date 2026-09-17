@@ -1,85 +1,143 @@
 # Wii U Web Stream
 
-> **Development status:** experimental / pre-release. The current source still needs its first successful devkitPPC CI build and hardware validation on a real Wii U before a stable release is published.
+A Wii U **Aroma/WUPS plugin** that streams the TV and GamePad outputs over your local network using HTTP/MJPEG. It is designed for modern browsers, OBS Studio, VLC/mpv-style MJPEG clients, phones and tablets without a dedicated PC client.
 
-Wii U Web Stream is an open-source **Aroma/WUPS plugin** that exposes the Wii U **TV output** and **GamePad output** over the local network as HTTP/MJPEG streams. The streams are designed to work in a normal web browser and in OBS Studio through Browser Source.
-
-## Features
-
-- TV and GamePad streaming at the same time.
-- Browser UI with both outputs.
-- Direct MJPEG endpoints for OBS and other clients.
-- JPEG snapshot endpoints.
-- Configurable FPS, JPEG quality and ports through the WUPS configuration menu.
-- Shared encoded frames: multiple viewers reuse the same JPEG instead of re-encoding once per client.
-- Capture only when a viewer or snapshot request needs a frame.
-- LAN-only filtering and **no UPnP/NAT-PMP/automatic port forwarding**.
+> `v0.2.0-dev` is a development build. The project compiles in CI with the current Wii U toolchain, but hardware testing is still required before a stable release.
 
 ## Default ports
 
 | Port | Purpose |
-| ---: | --- |
-| `7770` | Web UI, status API, snapshots and OBS helper pages |
-| `7771` | TV MJPEG stream |
-| `7772` | GamePad MJPEG stream |
+|---|---|
+| `7770` | Web dashboard, status, snapshots and OBS pages |
+| `7771` | TV MJPEG |
+| `7772` | GamePad MJPEG |
 
-## URLs
+No UPnP, NAT-PMP or automatic port forwarding is used. Public/non-LAN source addresses are rejected by the server.
 
-Replace `WIIU_IP` with the console IP address.
+## v0.2 highlights
 
-```text
-http://WIIU_IP:7770/                       Web UI
-http://WIIU_IP:7770/api/status             JSON status
-http://WIIU_IP:7770/snapshot/tv.jpg        TV snapshot
-http://WIIU_IP:7770/snapshot/gamepad.jpg   GamePad snapshot
-http://WIIU_IP:7770/obs/tv                 OBS helper page (TV)
-http://WIIU_IP:7770/obs/gamepad            OBS helper page (GamePad)
-http://WIIU_IP:7770/obs/dual               OBS helper page (both)
+### Presets
 
-http://WIIU_IP:7771/                       TV MJPEG
-http://WIIU_IP:7772/                       GamePad MJPEG
-```
+- **Low Latency** — higher FPS, lower JPEG quality and reduced output size.
+- **Balanced** — recommended general-purpose profile.
+- **Quality** — 720p TV with lower FPS and higher JPEG quality.
+- **OBS** — 720p TV plus native-target GamePad size with OBS-friendly quality/FPS.
+- **Custom** — manual FPS, resolution and JPEG settings.
 
-## OBS Studio
+Changing a manual FPS/resolution/JPEG value automatically makes the profile Custom.
 
-For maximum flexibility, add two **Browser Sources**:
+### Adaptive FPS
 
-```text
-TV:      http://WIIU_IP:7770/obs/tv
-GamePad: http://WIIU_IP:7770/obs/gamepad
-```
+When enabled, the capture path keeps a separate effective FPS. If the shared JPEG worker is still busy when a new frame arrives, the effective FPS backs off rather than blocking the render thread. It gradually recovers toward the configured target after the encoder has remained healthy.
 
-Recommended initial source sizes:
-
-- TV: `640x360`
-- GamePad: `854x480`
-
-The default target is intentionally conservative at 5 FPS per output until hardware profiling is complete. The WUPS menu allows values from 1 to 15 FPS.
-
-## Installation
-
-Stable releases will provide `WiiUWebStream.wps` and an SD-ready ZIP. The plugin belongs at:
+### Diagnostics
 
 ```text
-sd:/wiiu/environments/aroma/plugins/WiiUWebStream.wps
+http://WIIU_IP:7770/api/status
+http://WIIU_IP:7770/debug/performance
+http://WIIU_IP:7770/health
 ```
 
-The GX2 readback path depends on Aroma's MemoryMappingModule.
+`/api/status` includes actual FPS, target/effective FPS, connected clients, last-frame age, capture attempts, rate-limit drops, encoder-busy drops, copy/queue/encode failures, average JPEG size, average scaling time, average JPEG encoding time and watchdog counters.
 
-## Building
+### Port conflict detection
 
-### Podman (open source)
+The three sockets are now created/bound before listener threads start. If another plugin already owns one of the ports, the other available listeners can still start and the failed listener reports its bind error in `/api/status` and the WUPS menu.
+
+### Optional access code
+
+Enable **Require URL access code** in the WUPS menu and choose a numeric code. Then use:
+
+```text
+http://WIIU_IP:7770/?key=777777
+http://WIIU_IP:7771/stream.mjpg?key=777777
+http://WIIU_IP:7772/stream.mjpg?key=777777
+```
+
+This is LAN access control only. HTTP is not encrypted, so the key must not be treated as an Internet-grade password.
+
+## OBS
+
+TV:
+
+```text
+http://WIIU_IP:7770/obs/tv
+```
+
+GamePad:
+
+```text
+http://WIIU_IP:7770/obs/gamepad
+```
+
+Dual:
+
+```text
+http://WIIU_IP:7770/obs/dual
+```
+
+Picture-in-picture:
+
+```text
+http://WIIU_IP:7770/obs/dual?layout=pip
+```
+
+Single-source OBS pages accept:
+
+```text
+fit=contain|cover
+bg=transparent|black
+mirror=0|1
+rotate=0|90|180|270
+```
+
+Example:
+
+```text
+http://WIIU_IP:7770/obs/gamepad?fit=cover&mirror=1&rotate=180
+```
+
+If access-code protection is enabled, append `key=CODE` as another query parameter.
+
+## Snapshots
+
+```text
+http://WIIU_IP:7770/snapshot/tv.jpg
+http://WIIU_IP:7770/snapshot/gamepad.jpg
+http://WIIU_IP:7771/snapshot.jpg
+http://WIIU_IP:7772/snapshot.jpg
+```
+
+## Performance architecture
+
+```text
+GX2 TV / DRC hook
+      |
+      v
+mapped linear RGBA buffer
+      |
+      v
+single CPU2 JPEG worker
+      |
+      +--> latest shared TV JPEG
+      +--> latest shared GamePad JPEG
+                 |
+                 +--> Browser / OBS / phone / VLC clients
+```
+
+One frame is encoded once per source and shared between all clients. Slow network clients never hold the capture mutex while sending. Frames are dropped instead of blocking the game's render thread when the encoder is overloaded.
+
+The watchdog is deliberately conservative: it detects stale streams and requests a fresh capture. It does **not** tear down GX2 state from a background thread.
+
+## Build
+
+The repository includes a pinned Dockerfile and GitHub Actions build.
+
+With Podman (open source):
 
 ```powershell
 podman build -t wiiu-web-stream-builder .
 podman run --rm -v "${PWD}:/project" wiiu-web-stream-builder make
-```
-
-### Docker
-
-```powershell
-docker build -t wiiu-web-stream-builder .
-docker run --rm -v "${PWD}:/project" wiiu-web-stream-builder make
 ```
 
 Output:
@@ -88,70 +146,25 @@ Output:
 WiiUWebStream.wps
 ```
 
-GitHub Actions also runs this build automatically on pushes and pull requests.
-
-## Capture architecture
-
-The capture path follows current Aroma/WUPS GX2 techniques used by ScreenshotWUPS:
+Install to:
 
 ```text
-GX2 TV / GamePad scan buffer
-        |
-        v
-mapped linear RGBA8 buffer
-        |
-        v
-low-priority JPEG worker (libjpeg-turbo)
-        |
-        v
-latest shared JPEG frame
-        |
-        +--> browser
-        +--> OBS
-        +--> phone/tablet
+SD:/wiiu/environments/aroma/plugins/WiiUWebStream.wps
 ```
 
-The rendering hook does not perform socket I/O or JPEG compression. If the encoder still owns the previous buffer, a new frame is dropped instead of blocking the game to wait for the encoder.
+## Intentionally deferred
 
-## Security model
+These ideas are not enabled yet because they need additional API/hardware validation before they are safe to ship:
 
-This project is intended for a trusted local network.
+- mDNS / `wiiu.local`
+- Wii U audio capture/streaming
+- H.264 backend
+- asynchronous/double-buffer GX2 readback replacing `GX2DrawDone()`
+- automatic title blacklist based on title IDs
+- writing automatic snapshots to SD
 
-- No UPnP.
-- No NAT-PMP.
-- No automatic router configuration.
-- Incoming source addresses are restricted to common private/LAN address ranges.
-
-Do not manually expose ports `7770`-`7772` to the public Internet. Authentication is not implemented yet.
-
-## Project status / testing
-
-Before the first stable release, the following must be verified on real hardware:
-
-- clean devkitPPC/WUPS build;
-- TV capture in multiple titles;
-- GamePad capture in multiple titles;
-- simultaneous TV + GamePad stream;
-- OBS Browser Source compatibility;
-- application switching and HOME Menu behavior;
-- extended streaming for crashes, leaks and stutter.
-
-Please use GitHub Issues for reproducible test results and include the game/application, Aroma version, selected FPS/quality and relevant logs.
-
-## Credits and technical references
-
-The implementation was informed by several open-source Wii U projects, especially:
-
-- `wiiu-env/ScreenshotWUPS` for modern GX2 TV/GamePad screenshot capture patterns;
-- `wiiu-env/WiiUPluginSystem` for WUPS plugin/configuration APIs;
-- `wiiu-env/libmappedmemory` for GX2-compatible mapped allocations;
-- `wiiu-env/ftpiiu_plugin` and `wiiu-smarthome/Ristretto` for network/server patterns on Aroma/WUT;
-- `libjpeg-turbo` for JPEG encoding.
-
-See [`THIRD_PARTY.md`](THIRD_PARTY.md) for details.
+They remain reasonable future milestones, but the project will not invent or depend on unverified Wii U APIs to implement them.
 
 ## License
 
-Copyright (C) 2026 ElGamer7876
-
-Wii U Web Stream is licensed under **GNU GPL v3 or later** (`GPL-3.0-or-later`). See [`LICENSE`](LICENSE).
+GPL-3.0-or-later. See `LICENSE` and `THIRD_PARTY.md`.
