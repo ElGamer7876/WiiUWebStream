@@ -9,7 +9,6 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <cstring>
 
 namespace {
 
@@ -21,8 +20,13 @@ struct AXFinalMixParams {
     uint16_t numChannelOutput;
 };
 
+struct AudioSlot {
+    std::atomic_flag lock = ATOMIC_FLAG_INIT;
+    Audio::Packet packet{};
+};
+
 struct AudioState {
-    std::array<Audio::Packet, 8> packets{};
+    std::array<AudioSlot, 8> slots{};
     std::atomic_uint64_t sequence{0};
     std::atomic_uint64_t captured{0};
     std::atomic_uint64_t dropped{0};
@@ -58,22 +62,29 @@ void Capture(Audio::Source source, void *raw) {
     auto *params = static_cast<AXFinalMixParams *>(raw);
     if (params->data == nullptr || params->numSamples == 0 || params->numChannelInput == 0) return;
 
-    const uint16_t frames = static_cast<uint16_t>(std::min<size_t>(params->numSamples, Audio::MAX_FRAMES_PER_PACKET));
-    const uint64_t next = state.sequence.fetch_add(1) + 1;
-    Audio::Packet &packet = state.packets[next % state.packets.size()];
-    packet.sequence = 0;
-    packet.sampleRate = AXGetInputSamplesPerSec();
-    packet.channels = 2;
-    packet.frames = frames;
-    packet.bytes = static_cast<size_t>(frames) * Audio::PCM_BYTES_PER_FRAME;
+    const uint64_t next = state.sequence.load(std::memory_order_relaxed) + 1;
+    AudioSlot &slot = state.slots[next % state.slots.size()];
+    if (slot.lock.test_and_set(std::memory_order_acquire)) {
+        state.dropped.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
 
+    const uint16_t frames = static_cast<uint16_t>(std::min<size_t>(params->numSamples, Audio::MAX_FRAMES_PER_PACKET));
     const uint16_t channels = params->numChannelInput;
     int32_t *left = params->data[0];
     int32_t *right = params->data[channels > 1 ? 1 : 0];
     if (left == nullptr || right == nullptr) {
-        state.dropped.fetch_add(1);
+        state.dropped.fetch_add(1, std::memory_order_relaxed);
+        slot.lock.clear(std::memory_order_release);
         return;
     }
+
+    Audio::Packet &packet = slot.packet;
+    packet.sequence = next;
+    packet.sampleRate = AXGetInputSamplesPerSec();
+    packet.channels = 2;
+    packet.frames = frames;
+    packet.bytes = static_cast<size_t>(frames) * Audio::PCM_BYTES_PER_FRAME;
 
     for (uint16_t i = 0; i < frames; ++i) {
         const int16_t l = static_cast<int16_t>(Clamp24To16(left[i]));
@@ -85,10 +96,10 @@ void Capture(Audio::Source source, void *raw) {
         packet.pcm[o + 3] = static_cast<uint8_t>((static_cast<uint16_t>(r) >> 8) & 0xFF);
     }
 
-    state.sampleRate.store(packet.sampleRate);
-    state.captured.fetch_add(1);
-    std::atomic_thread_fence(std::memory_order_release);
-    packet.sequence = next;
+    state.sampleRate.store(packet.sampleRate, std::memory_order_relaxed);
+    state.captured.fetch_add(1, std::memory_order_relaxed);
+    state.sequence.store(next, std::memory_order_release);
+    slot.lock.clear(std::memory_order_release);
 }
 
 void TVCallback(void *raw) {
@@ -175,10 +186,12 @@ bool ReadAfter(Source source, uint64_t &lastSequence, Packet &out) {
     AudioState &state = State(source);
     const uint64_t latest = state.sequence.load(std::memory_order_acquire);
     if (latest == 0 || latest <= lastSequence) return false;
-    const Packet &packet = state.packets[latest % state.packets.size()];
-    std::atomic_thread_fence(std::memory_order_acquire);
-    if (packet.sequence != latest || packet.bytes > packet.pcm.size()) return false;
-    out = packet;
+    AudioSlot &slot = state.slots[latest % state.slots.size()];
+    if (slot.lock.test_and_set(std::memory_order_acquire)) return false;
+    const bool valid = slot.packet.sequence == latest && slot.packet.bytes <= slot.packet.pcm.size();
+    if (valid) out = slot.packet;
+    slot.lock.clear(std::memory_order_release);
+    if (!valid) return false;
     lastSequence = latest;
     return true;
 }
