@@ -2,6 +2,9 @@
 
 > **Development status:** experimental / pre-release. The current source still needs its first successful devkitPPC CI build and hardware validation on a real Wii U before a stable release is published.
 
+> [!WARNING]
+> Installing and using this plugin can cause the Wii U to **freeze during gameplay**. In some cases the console may stop responding completely and require a **forced power-off** by holding the console's POWER button. A forced shutdown can cause loss of unsaved progress and may increase the risk of data or filesystem corruption. Use this development build at your own risk, save your game frequently, and avoid testing HIGH RISK options when important unsaved data is open.
+
 Wii U Web Stream is an open-source **Aroma/WUPS plugin** that exposes the Wii U **TV output** and **GamePad output** over the local network as HTTP/MJPEG streams. The streams are designed to work in a normal web browser and in OBS Studio through Browser Source.
 
 ## Features
