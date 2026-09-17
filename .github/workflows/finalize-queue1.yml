@@ -1,0 +1,80 @@
+name: Finalize safe queue 1
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v0.2.0-dev
+          fetch-depth: 0
+
+      - name: Apply remaining safe queue 1 changes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('src/network.hpp')
+          p.write_text('''#pragma once\n#include <cstdint>\n#include <string>\nnamespace Network {\nbool Start();\nvoid Stop();\nvoid Restart();\nvoid Reconfigure();\nvoid EnsureListeners();\nbool IsRunning();\nuint64_t UptimeMs();\nstd::string ConsoleIpAddress();\nstd::string ListenerStatusSummary();\n} // namespace Network\n''')
+
+          p = Path('src/network.cpp')
+          s = p.read_text()
+          if '#include <sys/time.h>' not in s:
+              s = s.replace('#include <sys/socket.h>\n', '#include <sys/socket.h>\n#include <sys/time.h>\n')
+          if 'CLIENT_TIMEOUT_SECONDS' not in s:
+              s = s.replace('constexpr size_t MAX_CLIENTS_PER_PORT = 8;\n', 'constexpr size_t MAX_CLIENTS_PER_PORT = 8;\nconstexpr int CLIENT_TIMEOUT_SECONDS = 3;\n')
+          marker = '            if (!IsLanAddress(clientAddress.sin_addr.s_addr))'
+          if 'SO_RCVTIMEO' not in s:
+              s = s.replace(marker, '            timeval clientTimeout{}; clientTimeout.tv_sec = CLIENT_TIMEOUT_SECONDS; clientTimeout.tv_usec = 0;\n            setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &clientTimeout, sizeof(clientTimeout));\n            setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, &clientTimeout, sizeof(clientTimeout));\n' + marker)
+          if '\"uptimeMs\"' not in s:
+              s = s.replace('<< "\\\"jpegQuality\\\":" << Settings::jpegQuality.load()', '<< "\\\"uptimeMs\\\":" << Network::UptimeMs() << ",\\\"jpegQuality\\\":" << Settings::jpegQuality.load()')
+          if 'gNetworkStarted' not in s:
+              s = s.replace('std::atomic_bool gNetworkRunning{false}; std::mutex gLifecycleMutex;\n', 'std::atomic_bool gNetworkRunning{false}; std::mutex gLifecycleMutex;\nstd::chrono::steady_clock::time_point gNetworkStarted{};\n')
+              s = s.replace('    gNetworkRunning.store(web || tv || gp);\n', '    gNetworkRunning.store(web || tv || gp);\n    if (gNetworkRunning.load()) gNetworkStarted = std::chrono::steady_clock::now();\n')
+              s = s.replace('    FrameStore::NotifyAll(); gWeb.Stop(); gTV.Stop(); gGamePad.Stop(); Log::Info("network stopped");\n', '    FrameStore::NotifyAll(); gWeb.Stop(); gTV.Stop(); gGamePad.Stop(); gNetworkStarted = {}; Log::Info("network stopped");\n')
+          if 'void Reconfigure()' not in s:
+              s = s.replace('void Restart() { Stop(); Start(); }\nbool IsRunning() { return gNetworkRunning.load(); }', '''void Restart() { Stop(); Start(); }\n\nvoid Reconfigure() {\n    std::lock_guard<std::mutex> lock(gLifecycleMutex);\n    if (!Settings::enabled.load()) {\n        gWeb.Stop(); gTV.Stop(); gGamePad.Stop();\n        gNetworkRunning.store(false);\n        gNetworkStarted = {};\n        return;\n    }\n    if (!Settings::PortsAreValid()) { Log::Error("ports invalid or duplicated"); return; }\n    auto ensure = [](Listener &listener, uint16_t desiredPort) {\n        if (listener.IsRunning() && listener.Port() != desiredPort) listener.Stop();\n        if (!listener.IsRunning()) listener.Start(desiredPort);\n    };\n    ensure(gWeb, static_cast<uint16_t>(Settings::webPort.load()));\n    ensure(gTV, static_cast<uint16_t>(Settings::tvPort.load()));\n    ensure(gGamePad, static_cast<uint16_t>(Settings::gamepadPort.load()));\n    const bool any = gWeb.IsRunning() || gTV.IsRunning() || gGamePad.IsRunning();\n    if (any && !gNetworkRunning.load()) gNetworkStarted = std::chrono::steady_clock::now();\n    gNetworkRunning.store(any);\n}\n\nvoid EnsureListeners() { Reconfigure(); }\nbool IsRunning() { return gNetworkRunning.load(); }\nuint64_t UptimeMs() {\n    if (!gNetworkRunning.load() || gNetworkStarted.time_since_epoch().count() == 0) return 0;\n    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - gNetworkStarted).count());\n}''')
+          p.write_text(s)
+
+          p = Path('src/watchdog.cpp')
+          s = p.read_text()
+          if '#include "network.hpp"' not in s:
+              s = s.replace('#include "log.hpp"\n', '#include "log.hpp"\n#include "network.hpp"\n')
+          if 'networkTick' not in s:
+              s = s.replace('void Loop() {\n    while (gRunning.load()) {', 'void Loop() {\n    unsigned networkTick = 0;\n    while (gRunning.load()) {')
+              s = s.replace('            if (Settings::gamepadEnabled.load()) Check(VideoSource::GamePad);\n', '            if (Settings::gamepadEnabled.load()) Check(VideoSource::GamePad);\n            if (++networkTick >= 5) { networkTick = 0; Network::EnsureListeners(); }\n')
+          p.write_text(s)
+
+          p = Path('src/main.cpp')
+          s = p.read_text().replace('if (Settings::enabled.load()) Network::Restart(); else Network::Stop();', 'Network::Reconfigure();')
+          s = s.replace('Settings::DEFAULT_JPEG_QUALITY, Settings::jpegQuality.load(), 10, 95, QualityChanged', 'Settings::DEFAULT_JPEG_QUALITY, Settings::jpegQuality.load(), 35, 85, QualityChanged')
+          p.write_text(s)
+
+          p = Path('src/settings.cpp')
+          s = p.read_text().replace('std::clamp(value, 10, 95)', 'std::clamp(value, 35, 85)')
+          p.write_text(s)
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify plugin
+        run: test -s WiiUWebStream.wps
+
+      - name: Commit validated queue 1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Finalize safe queue 1 runtime safeguards"
+          git push origin HEAD:feature/v0.2.0-dev
