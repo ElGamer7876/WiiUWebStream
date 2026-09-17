@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v0.1.0"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build WUPS plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify output
+        run: test -s WiiUWebStream.wps
+
+      - name: Create SD-ready package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p package/wiiu/environments/aroma/plugins
+          cp WiiUWebStream.wps package/wiiu/environments/aroma/plugins/WiiUWebStream.wps
+          (cd package && zip -r "../WiiUWebStream-${VERSION}.zip" wiiu)
+          sha256sum WiiUWebStream.wps "WiiUWebStream-${VERSION}.zip" > SHA256SUMS.txt
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+          EXTRA_ARGS=""
+          if [ "$PRERELEASE" = "true" ]; then
+            EXTRA_ARGS="--prerelease"
+          fi
+
+          gh release create "$VERSION" \
+            WiiUWebStream.wps \
+            "WiiUWebStream-${VERSION}.zip" \
+            SHA256SUMS.txt \
+            --title "Wii U Web Stream ${VERSION}" \
+            --generate-notes \
+            $EXTRA_ARGS

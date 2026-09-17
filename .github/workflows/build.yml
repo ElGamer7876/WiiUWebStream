@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build WUPS plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify output
+        run: test -s WiiUWebStream.wps
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiiUWebStream-${{ github.sha }}
+          path: WiiUWebStream.wps
+          if-no-files-found: error
