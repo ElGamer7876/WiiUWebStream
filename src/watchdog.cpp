@@ -32,11 +32,16 @@ void Loop() {
         if (Settings::watchdogEnabled.load()) {
             if (Settings::tvEnabled.load()) Check(VideoSource::TV);
             if (Settings::gamepadEnabled.load()) Check(VideoSource::GamePad);
-            if (++networkTick >= 5) {
-                networkTick = 0;
-                Network::EnsureListeners();
-                Audio::EnsureCallbacks();
-            }
+        }
+
+        // Listener reconfiguration and AX callback ownership are runtime control
+        // tasks, not health-watchdog features. Keep these active even if the
+        // user disables stream-stall detection so Web Settings can safely apply
+        // port/server/audio changes outside the HTTP client thread.
+        if (++networkTick >= 5) {
+            networkTick = 0;
+            Network::EnsureListeners();
+            Audio::EnsureCallbacks();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
