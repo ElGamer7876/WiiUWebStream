@@ -39,6 +39,7 @@ CXXFLAGS += -DDEBUG -g
 CFLAGS   += -DDEBUG -g
 endif
 
+# sndcore2 is a CafeOS RPL import exposed by WUT, not a static -l library.
 LIBS    := -lwups -lwut -lturbojpeg -lmappedmemory -lm
 LIBDIRS := $(PORTLIBS) $(WUPS_ROOT) $(WUT_ROOT) $(WUMS_ROOT)
 
