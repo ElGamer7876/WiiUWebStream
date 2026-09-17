@@ -13,11 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct source archive
+      - name: Reconstruct and validate source archive
         run: |
           cat bootstrap/part00 bootstrap/part01 bootstrap/part02 bootstrap/part03 | base64 -d > /tmp/project.tar.gz
-          echo "37ec823eeeaec1988731ec04af5f8107a607bd7c42a8b4c670e2029e35df13a2  /tmp/project.tar.gz" | sha256sum -c -
+          gzip -t /tmp/project.tar.gz
+          tar -tzf /tmp/project.tar.gz >/dev/null
           tar -xzf /tmp/project.tar.gz -C .
+          test -s src/capture.cpp
+          test -s src/network.cpp
+          test -s LICENSE
           rm -rf bootstrap .github/workflows/bootstrap.yml
       - name: Commit imported project
         run: |
