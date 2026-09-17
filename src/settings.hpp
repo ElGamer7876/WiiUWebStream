@@ -18,6 +18,8 @@ enum class Resolution : int {
     R640x360 = 1,
     R854x480 = 2,
     R960x540 = 3,
+    R1280x720 = 4,
+    R1920x1080 = 5,
 };
 
 enum class LogLevel : int {
@@ -45,6 +47,10 @@ inline constexpr const char *KEY_AUTH_ENABLED = "authEnabled";
 inline constexpr const char *KEY_AUTH_CODE = "authCode";
 inline constexpr const char *KEY_WATCHDOG_ENABLED = "watchdogEnabled";
 inline constexpr const char *KEY_LOG_LEVEL = "logLevel";
+inline constexpr const char *KEY_HIGH_RISK_ENABLED = "highRiskEnabled";
+inline constexpr const char *KEY_HIGH_RISK_ACCEPTED = "highRiskAccepted";
+inline constexpr const char *KEY_AUDIO_STREAMING = "audioStreaming";
+inline constexpr const char *KEY_CONTINUOUS_CAPTURE = "continuousCapture";
 
 inline constexpr bool DEFAULT_ENABLED = true;
 inline constexpr int DEFAULT_PRESET = static_cast<int>(Preset::Balanced);
@@ -63,6 +69,10 @@ inline constexpr bool DEFAULT_AUTH_ENABLED = false;
 inline constexpr int DEFAULT_AUTH_CODE = 777777;
 inline constexpr bool DEFAULT_WATCHDOG_ENABLED = true;
 inline constexpr int DEFAULT_LOG_LEVEL = static_cast<int>(LogLevel::Info);
+inline constexpr bool DEFAULT_HIGH_RISK_ENABLED = false;
+inline constexpr bool DEFAULT_HIGH_RISK_ACCEPTED = false;
+inline constexpr bool DEFAULT_AUDIO_STREAMING = false;
+inline constexpr bool DEFAULT_CONTINUOUS_CAPTURE = false;
 
 extern std::atomic_bool enabled;
 extern std::atomic_int preset;
@@ -81,6 +91,10 @@ extern std::atomic_bool authEnabled;
 extern std::atomic_int authCode;
 extern std::atomic_bool watchdogEnabled;
 extern std::atomic_int logLevel;
+extern std::atomic_bool highRiskEnabled;
+extern std::atomic_bool highRiskAccepted;
+extern std::atomic_bool audioStreaming;
+extern std::atomic_bool continuousCapture;
 
 void Load();
 void Save();
@@ -103,7 +117,13 @@ void SetAuthEnabled(bool value);
 void SetAuthCode(int value);
 void SetWatchdogEnabled(bool value);
 void SetLogLevel(int value);
+void SetHighRiskEnabled(bool value);
+void SetHighRiskAccepted(bool value);
+void SetAudioStreaming(bool value);
+void SetContinuousCapture(bool value);
 
+bool HighRiskAccepted();
+void EnforceSafeLimits();
 bool PortsAreValid();
 void OutputDimensions(bool gamePad, uint32_t &width, uint32_t &height);
 const char *PresetName();
