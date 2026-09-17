@@ -1,0 +1,76 @@
+name: Publish v0.2.0-dev prerelease
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.head_commit.message == 'Publish v0.2.0-dev prerelease'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout v0.2.0-dev source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.2.0-dev
+          fetch-depth: 0
+
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build WUPS plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify output
+        run: test -s WiiUWebStream.wps
+
+      - name: Create SD-ready package and checksums
+        run: |
+          mkdir -p package/wiiu/environments/aroma/plugins
+          cp WiiUWebStream.wps package/wiiu/environments/aroma/plugins/WiiUWebStream.wps
+          (cd package && zip -r ../WiiUWebStream-v0.2.0-dev.zip wiiu)
+          sha256sum WiiUWebStream.wps WiiUWebStream-v0.2.0-dev.zip > SHA256SUMS.txt
+
+      - name: Create tag and pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: v0.2.0-dev
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+          cat > RELEASE_NOTES.md <<'EOF'
+          Development pre-release for physical Wii U testing.
+
+          Confirmed so far on real hardware:
+          - Web dashboard loads over LAN.
+          - TV and GamePad MJPEG streams can run simultaneously.
+
+          New in this build:
+          - Low-memory Web Settings page at /settings.
+          - Minimal WUPS recovery menu.
+          - Capture/audio working buffers are released while the WUPS menu is open to reduce Aroma menu memory pressure.
+          - Presets, adaptive FPS, listener recovery, diagnostics and socket timeouts.
+          - Optional access code.
+          - HIGH RISK gate for experimental 720p/1080p, up to 60 FPS, JPEG 95, continuous capture and AX final-mix audio streaming.
+          - TV/GamePad PCM16LE audio endpoints and OBS audio integration.
+
+          Important known limitation:
+          The older full WUPS configuration menu could run out of memory while Aroma rendered all controls. Full configuration has therefore moved to the browser at http://WIIU_IP:7770/settings. The WUPS menu is intentionally minimal.
+
+          HIGH RISK features remain experimental and may reduce performance, freeze or crash the console. Audio correctness, high-resolution/high-FPS modes, long-session stability and broad game compatibility still need additional physical hardware testing.
+          EOF
+
+          gh release create "$VERSION" \
+            WiiUWebStream.wps \
+            WiiUWebStream-v0.2.0-dev.zip \
+            SHA256SUMS.txt \
+            --title "Wii U Web Stream v0.2.0-dev" \
+            --notes-file RELEASE_NOTES.md \
+            --prerelease \
+            --verify-tag
