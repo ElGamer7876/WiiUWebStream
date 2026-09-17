@@ -1,0 +1,53 @@
+name: Integrate web settings
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v0.2.0-dev
+          fetch-depth: 0
+          path: dev
+
+      - name: Checkout integration script
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: control
+
+      - name: Apply web settings patch
+        run: python control/.github/scripts/add_web_settings.py dev
+
+      - name: Build toolchain image
+        working-directory: dev
+        run: docker build -t wiiu-web-stream-builder .
+
+      - name: Build plugin
+        working-directory: dev
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+
+      - name: Verify plugin
+        working-directory: dev
+        run: test -s WiiUWebStream.wps
+
+      - name: Commit validated web settings
+        working-directory: dev
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/network.cpp src/watchdog.cpp
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "Add low-memory web settings panel"
+            git push origin HEAD:feature/v0.2.0-dev
+          fi
