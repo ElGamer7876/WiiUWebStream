@@ -41,7 +41,6 @@ constexpr WUPSConfigItemMultipleValues::ValuePair RESOLUTION_VALUES[] = {
     {static_cast<uint32_t>(Settings::Resolution::R640x360), "640x360"},
     {static_cast<uint32_t>(Settings::Resolution::R854x480), "854x480"},
     {static_cast<uint32_t>(Settings::Resolution::R960x540), "960x540"},
-    {static_cast<uint32_t>(Settings::Resolution::R1280x720), "1280x720"},
 };
 constexpr WUPSConfigItemMultipleValues::ValuePair LOG_VALUES[] = {
     {static_cast<uint32_t>(Settings::LogLevel::Off), "Off"},
