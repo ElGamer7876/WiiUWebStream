@@ -1,4 +1,5 @@
 #include "watchdog.hpp"
+#include "audio.hpp"
 #include "capture.hpp"
 #include "frame_store.hpp"
 #include "metrics.hpp"
@@ -31,7 +32,11 @@ void Loop() {
         if (Settings::watchdogEnabled.load()) {
             if (Settings::tvEnabled.load()) Check(VideoSource::TV);
             if (Settings::gamepadEnabled.load()) Check(VideoSource::GamePad);
-            if (++networkTick >= 5) { networkTick = 0; Network::EnsureListeners(); }
+            if (++networkTick >= 5) {
+                networkTick = 0;
+                Network::EnsureListeners();
+                Audio::EnsureCallbacks();
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
