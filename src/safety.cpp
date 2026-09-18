@@ -56,6 +56,13 @@ bool SourceUnderLoad(VideoSource source, bool &severe, std::string &reason) {
     const auto stream = FrameStore::Stats(source);
     auto &previous = Previous(source);
 
+    if (metrics.encodedFrames < previous.encoded ||
+        metrics.encodeMicrosTotal < previous.encodeMicros ||
+        metrics.droppedEncoderBusy < previous.busyDrops) {
+        previous = {metrics.encodedFrames, metrics.encodeMicrosTotal, metrics.droppedEncoderBusy};
+        return false;
+    }
+
     const uint64_t deltaEncoded = metrics.encodedFrames - previous.encoded;
     const uint64_t deltaEncodeMicros = metrics.encodeMicrosTotal - previous.encodeMicros;
     const uint64_t deltaBusy = metrics.droppedEncoderBusy - previous.busyDrops;
