@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: b1e9906d658a2f07b02a694e5650f31986129a7a
+          ref: 377cd9670117a4bfac3a40f09967a36a80072f93
       - name: Verify source revision
-        run: test "$(git rev-parse HEAD)" = "b1e9906d658a2f07b02a694e5650f31986129a7a"
+        run: test "$(git rev-parse HEAD)" = "377cd9670117a4bfac3a40f09967a36a80072f93"
       - name: Build toolchain image
         run: docker build -t wiiu-web-stream-builder .
       - name: Build WUPS plugin
