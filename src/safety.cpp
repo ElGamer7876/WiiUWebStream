@@ -196,6 +196,8 @@ void ResumeStreaming() {
     SetReason("");
     gOverloadTicks = 0;
     gHealthyTicks = 0;
+    gTVPrevious = {};
+    gGamePadPrevious = {};
 
     if (!Capture::Start()) Log::Error("capture restart after Emergency Stop failed");
     Audio::Start();
