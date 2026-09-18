@@ -11,6 +11,7 @@ enum class Preset : int {
     Balanced = 2,
     Quality = 3,
     OBS = 4,
+    Recovery = 5,
 };
 
 enum class Resolution : int {
@@ -51,6 +52,8 @@ inline constexpr const char *KEY_HIGH_RISK_ENABLED = "highRiskEnabled";
 inline constexpr const char *KEY_HIGH_RISK_ACCEPTED = "highRiskAccepted";
 inline constexpr const char *KEY_AUDIO_STREAMING = "audioStreaming";
 inline constexpr const char *KEY_CONTINUOUS_CAPTURE = "continuousCapture";
+inline constexpr const char *KEY_SAFETY_GOVERNOR = "safetyGovernor";
+inline constexpr const char *KEY_SAFETY_WARNING_ACCEPTED = "safetyWarningAccepted";
 
 inline constexpr bool DEFAULT_ENABLED = true;
 inline constexpr int DEFAULT_PRESET = static_cast<int>(Preset::Balanced);
@@ -73,6 +76,8 @@ inline constexpr bool DEFAULT_HIGH_RISK_ENABLED = false;
 inline constexpr bool DEFAULT_HIGH_RISK_ACCEPTED = false;
 inline constexpr bool DEFAULT_AUDIO_STREAMING = false;
 inline constexpr bool DEFAULT_CONTINUOUS_CAPTURE = false;
+inline constexpr bool DEFAULT_SAFETY_GOVERNOR = true;
+inline constexpr bool DEFAULT_SAFETY_WARNING_ACCEPTED = false;
 
 extern std::atomic_bool enabled;
 extern std::atomic_int preset;
@@ -95,6 +100,8 @@ extern std::atomic_bool highRiskEnabled;
 extern std::atomic_bool highRiskAccepted;
 extern std::atomic_bool audioStreaming;
 extern std::atomic_bool continuousCapture;
+extern std::atomic_bool safetyGovernor;
+extern std::atomic_bool safetyWarningAccepted;
 
 void Load();
 void Save();
@@ -121,6 +128,8 @@ void SetHighRiskEnabled(bool value);
 void SetHighRiskAccepted(bool value);
 void SetAudioStreaming(bool value);
 void SetContinuousCapture(bool value);
+void SetSafetyGovernor(bool value);
+void SetSafetyWarningAccepted(bool value);
 
 bool HighRiskAccepted();
 void EnforceSafeLimits();
