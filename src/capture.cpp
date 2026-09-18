@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <malloc.h>
+#include <new>
 #include <vector>
 
 namespace {
@@ -39,6 +40,7 @@ constexpr uint32_t MAX_CAPTURE_WIDTH = 4096;
 constexpr uint32_t MAX_CAPTURE_HEIGHT = 2160;
 constexpr uint32_t MAX_CAPTURE_BYTES = 32 * 1024 * 1024;
 constexpr uint32_t ENCODER_STACK_SIZE = 128 * 1024;
+constexpr size_t MAX_ENCODER_WORK_BYTES = 24 * 1024 * 1024;
 
 enum : uint32_t { ENCODER_COMMAND_PROCESS = 1, ENCODER_COMMAND_STOP = 2 };
 
@@ -209,7 +211,14 @@ bool BuildScaledRgba(CaptureContext &context, std::vector<uint8_t> &scratch, uin
     const bool needsSrgb = context.convertLinearRgbToSrgb;
     if (!needsScale && !needsSrgb) { data = sourceBytes; pitchBytes = static_cast<int>(surface.pitch * 4); return true; }
 
-    scratch.resize(static_cast<size_t>(outputWidth) * outputHeight * 4);
+    const size_t rgbaBytes = static_cast<size_t>(outputWidth) * outputHeight * 4;
+    if (rgbaBytes > MAX_ENCODER_WORK_BYTES) return false;
+    try {
+        scratch.resize(rgbaBytes);
+    } catch (const std::bad_alloc &) {
+        Log::Error("RGBA scratch allocation failed for %s: %u x %u", VideoSourceName(context.source), outputWidth, outputHeight);
+        return false;
+    }
     const auto &srgb = LinearToSrgbTable();
     const uint32_t sourcePitch = surface.pitch;
     for (uint32_t y = 0; y < outputHeight; ++y) {
@@ -237,8 +246,21 @@ bool EncodeContext(tjhandle compressor, CaptureContext &context, std::vector<uin
     const int safetyQuality = Safety::JpegQualityCap();
     if (safetyQuality > 0) quality = std::min(quality, safetyQuality);
     const unsigned long maximumSize = tjBufSize(static_cast<int>(outputWidth), static_cast<int>(outputHeight), TJSAMP_420);
-    if (maximumSize == 0) { Metrics::EncodeFailure(context.source); return false; }
-    std::vector<uint8_t> jpeg(maximumSize); unsigned char *jpegPointer = jpeg.data(); unsigned long jpegSize = maximumSize;
+    const size_t rgbaBudget = static_cast<size_t>(outputWidth) * outputHeight * 4;
+    if (maximumSize == 0 || rgbaBudget + static_cast<size_t>(maximumSize) > MAX_ENCODER_WORK_BYTES) {
+        Metrics::EncodeFailure(context.source);
+        Log::Error("encoder memory budget rejected %s %ux%u", VideoSourceName(context.source), outputWidth, outputHeight);
+        return false;
+    }
+    std::vector<uint8_t> jpeg;
+    try {
+        jpeg.resize(maximumSize);
+    } catch (const std::bad_alloc &) {
+        Metrics::EncodeFailure(context.source);
+        Log::Error("JPEG buffer allocation failed for %s", VideoSourceName(context.source));
+        return false;
+    }
+    unsigned char *jpegPointer = jpeg.data(); unsigned long jpegSize = maximumSize;
     const auto encodeStart = std::chrono::steady_clock::now();
     const int result = tjCompress2(compressor, input, static_cast<int>(outputWidth), inputPitch, static_cast<int>(outputHeight), TJPF_RGBA,
                                    &jpegPointer, &jpegSize, TJSAMP_420, quality, TJFLAG_FASTDCT | TJFLAG_NOREALLOC);
