@@ -27,6 +27,8 @@ std::atomic_bool highRiskEnabled{DEFAULT_HIGH_RISK_ENABLED};
 std::atomic_bool highRiskAccepted{DEFAULT_HIGH_RISK_ACCEPTED};
 std::atomic_bool audioStreaming{DEFAULT_AUDIO_STREAMING};
 std::atomic_bool continuousCapture{DEFAULT_CONTINUOUS_CAPTURE};
+std::atomic_bool safetyGovernor{DEFAULT_SAFETY_GOVERNOR};
+std::atomic_bool safetyWarningAccepted{DEFAULT_SAFETY_WARNING_ACCEPTED};
 
 namespace {
 
@@ -95,6 +97,8 @@ void Load() {
     LoadValue(KEY_HIGH_RISK_ACCEPTED, highRiskAccepted, DEFAULT_HIGH_RISK_ACCEPTED);
     LoadValue(KEY_AUDIO_STREAMING, audioStreaming, DEFAULT_AUDIO_STREAMING);
     LoadValue(KEY_CONTINUOUS_CAPTURE, continuousCapture, DEFAULT_CONTINUOUS_CAPTURE);
+    LoadValue(KEY_SAFETY_GOVERNOR, safetyGovernor, DEFAULT_SAFETY_GOVERNOR);
+    LoadValue(KEY_SAFETY_WARNING_ACCEPTED, safetyWarningAccepted, DEFAULT_SAFETY_WARNING_ACCEPTED);
 
     authCode.store(std::clamp(authCode.load(), 0, 999999));
     EnforceSafeLimits();
@@ -143,6 +147,18 @@ void ApplyPreset(Preset value) {
             StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, static_cast<int>(Resolution::R854x480));
             StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, true);
             break;
+        case Preset::Recovery:
+            StoreValue(KEY_TV_FPS, tvFps, 5);
+            StoreValue(KEY_GAMEPAD_FPS, gamepadFps, 5);
+            StoreValue(KEY_JPEG_QUALITY, jpegQuality, 60);
+            StoreValue(KEY_TV_RESOLUTION, tvResolution, static_cast<int>(Resolution::R640x360));
+            StoreValue(KEY_GAMEPAD_RESOLUTION, gamepadResolution, static_cast<int>(Resolution::R640x360));
+            StoreValue(KEY_ADAPTIVE_FPS, adaptiveFps, true);
+            StoreValue(KEY_HIGH_RISK_ENABLED, highRiskEnabled, false);
+            StoreValue(KEY_HIGH_RISK_ACCEPTED, highRiskAccepted, false);
+            StoreValue(KEY_AUDIO_STREAMING, audioStreaming, false);
+            StoreValue(KEY_CONTINUOUS_CAPTURE, continuousCapture, false);
+            break;
         case Preset::Custom:
         default:
             break;
@@ -150,7 +166,7 @@ void ApplyPreset(Preset value) {
 }
 
 void SetEnabled(bool value) { StoreValue(KEY_ENABLED, enabled, value); }
-void SetPreset(int value) { ApplyPreset(static_cast<Preset>(std::clamp(value, 0, 4))); }
+void SetPreset(int value) { ApplyPreset(static_cast<Preset>(std::clamp(value, 0, 5))); }
 void SetWebPort(int value) { StoreValue(KEY_WEB_PORT, webPort, value); }
 void SetTvPort(int value) { StoreValue(KEY_TV_PORT, tvPort, value); }
 void SetGamePadPort(int value) { StoreValue(KEY_GAMEPAD_PORT, gamepadPort, value); }
@@ -170,6 +186,8 @@ void SetHighRiskEnabled(bool value) { StoreValue(KEY_HIGH_RISK_ENABLED, highRisk
 void SetHighRiskAccepted(bool value) { StoreValue(KEY_HIGH_RISK_ACCEPTED, highRiskAccepted, value); if (!value) EnforceSafeLimits(); }
 void SetAudioStreaming(bool value) { StoreValue(KEY_AUDIO_STREAMING, audioStreaming, HighRiskAccepted() && value); }
 void SetContinuousCapture(bool value) { StoreValue(KEY_CONTINUOUS_CAPTURE, continuousCapture, HighRiskAccepted() && value); }
+void SetSafetyGovernor(bool value) { StoreValue(KEY_SAFETY_GOVERNOR, safetyGovernor, value); }
+void SetSafetyWarningAccepted(bool value) { StoreValue(KEY_SAFETY_WARNING_ACCEPTED, safetyWarningAccepted, value); }
 
 bool PortsAreValid() {
     const int web = webPort.load();
@@ -193,11 +211,12 @@ void OutputDimensions(bool gamePad, uint32_t &width, uint32_t &height) {
 }
 
 const char *PresetName() {
-    switch (static_cast<Preset>(std::clamp(preset.load(), 0, 4))) {
+    switch (static_cast<Preset>(std::clamp(preset.load(), 0, 5))) {
         case Preset::LowLatency: return "Low Latency";
         case Preset::Balanced: return "Balanced";
         case Preset::Quality: return "Quality";
         case Preset::OBS: return "OBS";
+        case Preset::Recovery: return "Recovery";
         case Preset::Custom: default: return "Custom";
     }
 }
