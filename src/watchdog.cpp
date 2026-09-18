@@ -3,6 +3,7 @@
 #include "capture.hpp"
 #include "frame_store.hpp"
 #include "metrics.hpp"
+#include "safety.hpp"
 #include "settings.hpp"
 #include "log.hpp"
 #include "network.hpp"
@@ -38,6 +39,8 @@ void Loop() {
         // tasks, not health-watchdog features. Keep these active even if the
         // user disables stream-stall detection so Web Settings can safely apply
         // port/server/audio changes outside the HTTP client thread.
+        Safety::Tick();
+
         if (++networkTick >= 5) {
             networkTick = 0;
             Network::EnsureListeners();
