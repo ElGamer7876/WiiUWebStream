@@ -2,6 +2,7 @@
 #include "capture.hpp"
 #include "log.hpp"
 #include "network.hpp"
+#include "safety.hpp"
 #include "settings.hpp"
 #include "watchdog.hpp"
 
@@ -47,6 +48,11 @@ void PauseHeavyRuntimeForConfig() {
 
 void ResumeHeavyRuntimeAfterConfig() {
     if (!gApplicationRunning.load() || !gPausedForConfig.exchange(false)) return;
+    if (Safety::EmergencyStopped()) {
+        Network::Reconfigure();
+        Log::Info("Emergency Stop remains active after WUPS config menu");
+        return;
+    }
     if (!Capture::Start()) Log::Error("capture restart after config failed");
     Audio::Start();
     Audio::ApplySettings();
@@ -100,6 +106,7 @@ void StartRuntime() {
     if (!gApplicationRunning.compare_exchange_strong(expected, true)) return;
     nn::ac::Initialize();
     nn::ac::ConnectAsync();
+    Safety::Reset();
     if (!Capture::Start()) Log::Error("capture startup failed");
     Audio::Start();
     Watchdog::Start();
