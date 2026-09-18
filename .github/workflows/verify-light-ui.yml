@@ -14,12 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 377cd9670117a4bfac3a40f09967a36a80072f93
+          ref: 4d30da63454fa5d04a0def5d6de3645e430f70ab
       - name: Verify source revision
-        run: test "$(git rev-parse HEAD)" = "377cd9670117a4bfac3a40f09967a36a80072f93"
+        run: test "$(git rev-parse HEAD)" = "4d30da63454fa5d04a0def5d6de3645e430f70ab"
       - name: Build toolchain image
         run: docker build -t wiiu-web-stream-builder .
       - name: Build WUPS plugin
         run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
       - name: Verify output
         run: test -s WiiUWebStream.wps
+
+      - name: Upload test plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiiUWebStream-light-ui-test
+          path: WiiUWebStream.wps
+          if-no-files-found: error
