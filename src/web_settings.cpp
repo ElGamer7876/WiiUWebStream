@@ -155,81 +155,101 @@ std::string BuildPage(const std::string &authSuffix) {
     const bool highRisk = Settings::HighRiskAccepted();
     const std::string authKey = AuthKey(authSuffix);
     std::ostringstream out;
-    out << R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wii U Web Stream Settings</title><style>
+
+    out << R"HTML(<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Wii U Web Stream Settings</title><style>
 body{font:15px system-ui;margin:14px;max-width:760px;background:#111;color:#eee}fieldset{margin:10px 0;padding:10px;border:1px solid #555}label{display:block;margin:5px 0}input,select,button{font:inherit;margin:2px;padding:4px}a{color:#9cf}.row{display:flex;gap:6px;flex-wrap:wrap}.warn{border-color:#a66}.hide{display:none}small{color:#aaa}
-</style></head><body><h1>Settings</h1><p><a href="/)HTML" << authSuffix << R"HTML(">Dashboard</a> · <a href="/diagnostics.txt)HTML" << authSuffix << R"HTML(">Diagnostics</a></p>)HTML";
+</style></head><body><h1>Settings</h1><p><a href='/)HTML" << authSuffix << R"HTML('>Dashboard</a> · <a href='/diagnostics.txt)HTML" << authSuffix << R"HTML('>Diagnostics</a></p>)HTML";
+
     if (!Settings::safetyWarningAccepted.load()) {
-        out << R"HTML(<fieldset class="warn" id="warning"><legend>Safety warning</legend><p>This development build may freeze the Wii U during gameplay and can require a forced power-off. Save progress before testing.</p><button id="acceptWarning" type="button">I understand</button></fieldset>)HTML";
+        out << R"HTML(<fieldset class='warn' id='warning'><legend>Safety warning</legend><p>This development build may freeze the Wii U during gameplay and can require a forced power-off. Save progress before testing.</p><button id='acceptWarning' type='button'>I understand</button></fieldset>)HTML";
     }
 
-    out << "<fieldset><legend>Safety & Recovery</legend><p id="safetyState">Loading…</p>"
-        << "<label><input type="checkbox" form="settings" name="safetyGovernor"" << Checked(Settings::safetyGovernor.load()) << "> Safety Governor</label>"
-        << "<div class="row"><button type="button" onclick="control('recovery')">Recovery preset</button><button type="button" onclick="control('emergencyStop')">STOP ALL STREAMING</button><button type="button" onclick="control('resume')">Resume</button></div></fieldset>";
+    out << R"HTML(<fieldset><legend>Safety & Recovery</legend><p id='safetyState'>Loading...</p><label><input type='checkbox' form='settings' name='safetyGovernor')HTML"
+        << Checked(Settings::safetyGovernor.load())
+        << R"HTML(> Safety Governor</label><div class='row'><button type='button' onclick="control('recovery')">Recovery preset</button><button type='button' onclick="control('emergencyStop')">STOP ALL STREAMING</button><button type='button' onclick="control('resume')">Resume</button></div></fieldset>)HTML";
 
-    out << "<form id="settings"><fieldset><legend>General</legend>"
-        << "<label><input type="checkbox" name="enabled"" << Checked(Settings::enabled.load()) << "> Enable server</label>"
-        << "<label>Preset <select name="preset">"
-        << "<option value="0"" << Selected(Settings::preset.load(),0) << ">Custom</option>"
-        << "<option value="1"" << Selected(Settings::preset.load(),1) << ">Low Latency</option>"
-        << "<option value="2"" << Selected(Settings::preset.load(),2) << ">Balanced</option>"
-        << "<option value="3"" << Selected(Settings::preset.load(),3) << ">Quality</option>"
-        << "<option value="4"" << Selected(Settings::preset.load(),4) << ">OBS</option>"
-        << "<option value="5"" << Selected(Settings::preset.load(),5) << ">Recovery</option></select></label></fieldset>";
+    out << R"HTML(<form id='settings'><fieldset><legend>General</legend><label><input type='checkbox' name='enabled')HTML"
+        << Checked(Settings::enabled.load())
+        << R"HTML(> Enable server</label><label>Preset <select name='preset'>)HTML"
+        << "<option value='0'" << Selected(Settings::preset.load(), 0) << ">Custom</option>"
+        << "<option value='1'" << Selected(Settings::preset.load(), 1) << ">Low Latency</option>"
+        << "<option value='2'" << Selected(Settings::preset.load(), 2) << ">Balanced</option>"
+        << "<option value='3'" << Selected(Settings::preset.load(), 3) << ">Quality</option>"
+        << "<option value='4'" << Selected(Settings::preset.load(), 4) << ">OBS</option>"
+        << "<option value='5'" << Selected(Settings::preset.load(), 5) << ">Recovery</option>"
+        << R"HTML(</select></label></fieldset>)HTML";
 
-    out << "<fieldset><legend>Network</legend>"
-        << "<label>Web port <input type="number" min="1024" max="65535" name="webPort" value="" << Settings::webPort.load() << ""></label>"
-        << "<label>TV port <input type="number" min="1024" max="65535" name="tvPort" value="" << Settings::tvPort.load() << ""></label>"
-        << "<label>GamePad port <input type="number" min="1024" max="65535" name="gamepadPort" value="" << Settings::gamepadPort.load() << ""></label></fieldset>";
+    out << R"HTML(<fieldset><legend>Network</legend><label>Web port <input type='number' min='1024' max='65535' name='webPort' value=')HTML"
+        << Settings::webPort.load()
+        << R"HTML('></label><label>TV port <input type='number' min='1024' max='65535' name='tvPort' value=')HTML"
+        << Settings::tvPort.load()
+        << R"HTML('></label><label>GamePad port <input type='number' min='1024' max='65535' name='gamepadPort' value=')HTML"
+        << Settings::gamepadPort.load()
+        << R"HTML('></label></fieldset>)HTML";
 
-    out << "<fieldset><legend>Video</legend>"
-        << "<label><input type="checkbox" name="tvEnabled"" << Checked(Settings::tvEnabled.load()) << "> TV</label>"
-        << "<label><input type="checkbox" name="gamepadEnabled"" << Checked(Settings::gamepadEnabled.load()) << "> GamePad</label>"
-        << "<label>TV FPS <input type="number" name="tvFps" min="1" max="60" value="" << Settings::tvFps.load() << ""></label>"
-        << "<label>GamePad FPS <input type="number" name="gamepadFps" min="1" max="60" value="" << Settings::gamepadFps.load() << ""></label>"
-        << "<label>JPEG quality <input type="number" name="jpegQuality" min="35" max="95" value="" << Settings::jpegQuality.load() << ""></label>";
+    out << R"HTML(<fieldset><legend>Video</legend><label><input type='checkbox' name='tvEnabled')HTML"
+        << Checked(Settings::tvEnabled.load())
+        << R"HTML(> TV</label><label><input type='checkbox' name='gamepadEnabled')HTML"
+        << Checked(Settings::gamepadEnabled.load())
+        << R"HTML(> GamePad</label><label>TV FPS <input type='number' name='tvFps' min='1' max='60' value=')HTML"
+        << Settings::tvFps.load()
+        << R"HTML('></label><label>GamePad FPS <input type='number' name='gamepadFps' min='1' max='60' value=')HTML"
+        << Settings::gamepadFps.load()
+        << R"HTML('></label><label>JPEG quality <input type='number' name='jpegQuality' min='35' max='95' value=')HTML"
+        << Settings::jpegQuality.load()
+        << R"HTML('></label>)HTML";
 
-    auto res = [&out](const char *name, int current, const char *label) {
-        out << "<label>" << label << " <select name="" << name << "">"
-            << "<option value="0"" << Selected(current,0) << ">426x240</option>"
-            << "<option value="1"" << Selected(current,1) << ">640x360</option>"
-            << "<option value="2"" << Selected(current,2) << ">854x480</option>"
-            << "<option value="3"" << Selected(current,3) << ">960x540</option>"
-            << "<option value="4"" << Selected(current,4) << ">1280x720 HIGH RISK</option>"
-            << "<option value="5"" << Selected(current,5) << ">1920x1080 HIGH RISK</option></select></label>";
+    auto resolutionSelect = [&out](const char *name, int current, const char *label) {
+        out << "<label>" << label << " <select name='" << name << "'>"
+            << "<option value='0'" << Selected(current, 0) << ">426x240</option>"
+            << "<option value='1'" << Selected(current, 1) << ">640x360</option>"
+            << "<option value='2'" << Selected(current, 2) << ">854x480</option>"
+            << "<option value='3'" << Selected(current, 3) << ">960x540</option>"
+            << "<option value='4'" << Selected(current, 4) << ">1280x720 HIGH RISK</option>"
+            << "<option value='5'" << Selected(current, 5) << ">1920x1080 HIGH RISK</option></select></label>";
     };
-    res("tvResolution", Settings::tvResolution.load(), "TV resolution");
-    res("gamepadResolution", Settings::gamepadResolution.load(), "GamePad resolution");
+    resolutionSelect("tvResolution", Settings::tvResolution.load(), "TV resolution");
+    resolutionSelect("gamepadResolution", Settings::gamepadResolution.load(), "GamePad resolution");
 
-    out << "<label><input type="checkbox" name="adaptiveFps"" << Checked(Settings::adaptiveFps.load()) << "> Adaptive FPS</label>"
-        << "<label><input type="checkbox" name="watchdogEnabled"" << Checked(Settings::watchdogEnabled.load()) << "> Watchdog</label></fieldset>";
+    out << R"HTML(<label><input type='checkbox' name='adaptiveFps')HTML"
+        << Checked(Settings::adaptiveFps.load())
+        << R"HTML(> Adaptive FPS</label><label><input type='checkbox' name='watchdogEnabled')HTML"
+        << Checked(Settings::watchdogEnabled.load())
+        << R"HTML(> Watchdog</label></fieldset>)HTML";
 
-    out << "<fieldset><legend>Security & Logging</legend>"
-        << "<label><input type="checkbox" name="authEnabled"" << Checked(Settings::authEnabled.load()) << "> Require URL code</label>"
-        << "<label>Access code <input type="number" name="authCode" min="0" max="999999" value="" << Settings::authCode.load() << ""></label>"
-        << "<label>Log <select name="logLevel">"
-        << "<option value="0"" << Selected(Settings::logLevel.load(),0) << ">Off</option>"
-        << "<option value="1"" << Selected(Settings::logLevel.load(),1) << ">Errors</option>"
-        << "<option value="2"" << Selected(Settings::logLevel.load(),2) << ">Info</option>"
-        << "<option value="3"" << Selected(Settings::logLevel.load(),3) << ">Verbose</option></select></label></fieldset>";
+    out << R"HTML(<fieldset><legend>Security & Logging</legend><label><input type='checkbox' name='authEnabled')HTML"
+        << Checked(Settings::authEnabled.load())
+        << R"HTML(> Require URL code</label><label>Access code <input type='number' name='authCode' min='0' max='999999' value=')HTML"
+        << Settings::authCode.load()
+        << R"HTML('></label><label>Log <select name='logLevel'>)HTML"
+        << "<option value='0'" << Selected(Settings::logLevel.load(), 0) << ">Off</option>"
+        << "<option value='1'" << Selected(Settings::logLevel.load(), 1) << ">Errors</option>"
+        << "<option value='2'" << Selected(Settings::logLevel.load(), 2) << ">Info</option>"
+        << "<option value='3'" << Selected(Settings::logLevel.load(), 3) << ">Verbose</option>"
+        << R"HTML(</select></label></fieldset>)HTML";
 
-    out << "<fieldset class="warn"><legend>Advanced / Experimental</legend>"
-        << "<label><input id="riskEnable" type="checkbox" name="highRiskEnabled"" << Checked(Settings::highRiskEnabled.load()) << "> Enable HIGH RISK</label>"
-        << "<label><input id="riskAccept" type="checkbox" name="highRiskAccepted"" << Checked(Settings::highRiskAccepted.load()) << "> I accept the risk</label>"
-        << "<div id="riskOptions" class="" << (highRisk ? "" : "hide") << "">"
-        << "<label><input type="checkbox" name="audioStreaming"" << Checked(Settings::audioStreaming.load()) << "> Audio streaming HIGH RISK</label>"
-        << "<label><input type="checkbox" name="continuousCapture"" << Checked(Settings::continuousCapture.load()) << "> Continuous capture HIGH RISK</label>"
-        << "</div></fieldset>";
-
-    out << "<button type="submit">Save</button> <span id="status"></span></form>";
+    out << R"HTML(<fieldset class='warn'><legend>Advanced / Experimental</legend><label><input id='riskEnable' type='checkbox' name='highRiskEnabled')HTML"
+        << Checked(Settings::highRiskEnabled.load())
+        << R"HTML(> Enable HIGH RISK</label><label><input id='riskAccept' type='checkbox' name='highRiskAccepted')HTML"
+        << Checked(Settings::highRiskAccepted.load())
+        << R"HTML(> I accept the risk</label><div id='riskOptions' class=')HTML"
+        << (highRisk ? "" : "hide")
+        << R"HTML('><label><input type='checkbox' name='audioStreaming')HTML"
+        << Checked(Settings::audioStreaming.load())
+        << R"HTML(> Audio streaming HIGH RISK</label><label><input type='checkbox' name='continuousCapture')HTML"
+        << Checked(Settings::continuousCapture.load())
+        << R"HTML(> Continuous capture HIGH RISK</label></div></fieldset><button type='submit'>Save</button> <span id='status'></span></form>)HTML";
 
     out << R"HTML(<script>
-const f=document.getElementById('settings'),st=document.getElementById('status'),re=document.getElementById('riskEnable'),ra=document.getElementById('riskAccept'),ro=document.getElementById('riskOptions'),K=')HTML" << authKey << R"HTML(';
+const f=document.getElementById('settings'),st=document.getElementById('status'),re=document.getElementById('riskEnable'),ra=document.getElementById('riskAccept'),ro=document.getElementById('riskOptions'),K=')HTML"
+        << authKey
+        << R"HTML(';
 function key(q){if(K)q.set('key',K)}
 function risk(){ro.className=(re.checked&&ra.checked)?'':'hide'}re.onchange=risk;ra.onchange=risk;
 async function control(a){const q=new URLSearchParams({action:a});key(q);try{const j=await(await fetch('/api/control?'+q,{method:'POST',cache:'no-store'})).json();st.textContent=j.message||'';status()}catch(e){st.textContent='Request failed'}}
-async function status(){try{const q=new URLSearchParams;key(q);const s=await(await fetch('/api/status'+(q.toString()?'?'+q:''),{cache:'no-store'})).json();safetyState.textContent=s.emergencyStopped?'EMERGENCY STOP':(s.safetyActive?'Governor level '+s.safetyLevel+': '+(s.safetyReason||''):'NORMAL')}catch(e){}}
+async function status(){try{const q=new URLSearchParams;key(q);const s=await(await fetch('/api/status'+(q.toString()?'?'+q:''),{cache:'no-store'})).json();document.getElementById('safetyState').textContent=s.emergencyStopped?'EMERGENCY STOP':(s.safetyActive?'Governor level '+s.safetyLevel+': '+(s.safetyReason||''):'NORMAL')}catch(e){}}
 f.onsubmit=async e=>{e.preventDefault();const q=new URLSearchParams(new FormData(f));for(const n of ['enabled','tvEnabled','gamepadEnabled','adaptiveFps','watchdogEnabled','authEnabled','highRiskEnabled','highRiskAccepted','audioStreaming','continuousCapture','safetyGovernor']){const x=f.elements[n];q.set(n,x&&x.checked?'1':'0')}key(q);st.textContent='Saving...';try{const j=await(await fetch('/api/settings?'+q,{method:'POST',cache:'no-store'})).json();st.textContent=j.message||'';if(j.ok)setTimeout(()=>location.reload(),500)}catch(e){st.textContent='Save failed'}};
-const aw=document.getElementById('acceptWarning');if(aw)aw.onclick=async()=>{await control('acceptWarning');warning.remove()};
+const aw=document.getElementById('acceptWarning');if(aw)aw.onclick=async()=>{await control('acceptWarning');document.getElementById('warning').remove()};
 risk();status();setInterval(status,5000);
 </script></body></html>)HTML";
     return out.str();
