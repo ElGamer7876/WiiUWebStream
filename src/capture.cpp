@@ -3,6 +3,7 @@
 #include "frame_store.hpp"
 #include "log.hpp"
 #include "metrics.hpp"
+#include "safety.hpp"
 #include "settings.hpp"
 
 #include <memory/mappedmemory.h>
@@ -75,7 +76,13 @@ std::atomic_bool gHaveLastTV{false};
 std::atomic_bool gHaveLastGamePad{false};
 
 CaptureContext &ContextFor(VideoSource source) { return source == VideoSource::TV ? gTVContext : gGamePadContext; }
-int TargetFps(VideoSource source) { return std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(), 1, Settings::HighRiskAccepted() ? 60 : 15); }
+int TargetFps(VideoSource source) {
+    int target = std::clamp(source == VideoSource::TV ? Settings::tvFps.load() : Settings::gamepadFps.load(),
+                            1, Settings::HighRiskAccepted() ? 60 : 15);
+    const int safetyCap = Safety::FpsCap(source);
+    if (safetyCap > 0) target = std::min(target, safetyCap);
+    return target;
+}
 bool SourceEnabled(VideoSource source) {
     if (!Settings::enabled.load()) return false;
     return source == VideoSource::TV ? Settings::tvEnabled.load() : Settings::gamepadEnabled.load();
@@ -118,6 +125,7 @@ void PenalizeAdaptive(CaptureContext &context, uint64_t now) {
 
 void OutputDimensions(VideoSource source, uint32_t &width, uint32_t &height) {
     Settings::OutputDimensions(source == VideoSource::GamePad, width, height);
+    Safety::ClampDimensions(source, width, height);
 }
 
 std::array<uint8_t, 256> BuildLinearToSrgbTable() {
@@ -225,7 +233,9 @@ bool EncodeContext(tjhandle compressor, CaptureContext &context, std::vector<uin
     if (!BuildScaledRgba(context, rgbaScratch, outputWidth, outputHeight, input, inputPitch)) { Metrics::EncodeFailure(context.source); return false; }
     const auto scaleEnd = std::chrono::steady_clock::now();
 
-    const int quality = std::clamp(Settings::jpegQuality.load(), 35, Settings::HighRiskAccepted() ? 95 : 85);
+    int quality = std::clamp(Settings::jpegQuality.load(), 35, Settings::HighRiskAccepted() ? 95 : 85);
+    const int safetyQuality = Safety::JpegQualityCap();
+    if (safetyQuality > 0) quality = std::min(quality, safetyQuality);
     const unsigned long maximumSize = tjBufSize(static_cast<int>(outputWidth), static_cast<int>(outputHeight), TJSAMP_420);
     if (maximumSize == 0) { Metrics::EncodeFailure(context.source); return false; }
     std::vector<uint8_t> jpeg(maximumSize); unsigned char *jpegPointer = jpeg.data(); unsigned long jpegSize = maximumSize;
