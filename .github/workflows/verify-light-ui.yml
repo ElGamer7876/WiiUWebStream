@@ -1,0 +1,25 @@
+name: Verify light UI branch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event.head_commit.message == 'Verify light UI branch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b1e9906d658a2f07b02a694e5650f31986129a7a
+      - name: Verify source revision
+        run: test "$(git rev-parse HEAD)" = "b1e9906d658a2f07b02a694e5650f31986129a7a"
+      - name: Build toolchain image
+        run: docker build -t wiiu-web-stream-builder .
+      - name: Build WUPS plugin
+        run: docker run --rm -v "$PWD:/project" wiiu-web-stream-builder make
+      - name: Verify output
+        run: test -s WiiUWebStream.wps
