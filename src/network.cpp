@@ -5,6 +5,7 @@
 #include "frame_store.hpp"
 #include "log.hpp"
 #include "metrics.hpp"
+#include "safety.hpp"
 #include "settings.hpp"
 #include "types.hpp"
 #include "web_settings.hpp"
@@ -229,8 +230,9 @@ private:
 
     void HandleClient(ClientSlot &slot) {
         const int fd = slot.socket.load(); if (fd < 0) return; HttpRequest request; if (!ReadRequest(fd, request)) return;
-        const bool settingsPost = mKind == ListenerKind::Web && request.method == "POST" && request.path == "/api/settings";
-        if (request.method != "GET" && !settingsPost) { SendResponse(fd, 405, "Method Not Allowed", "text/plain; charset=utf-8", "Only GET is supported, except POST /api/settings.\n", "Allow: GET, POST\r\n"); return; }
+        const bool webPost = mKind == ListenerKind::Web && request.method == "POST" &&
+                             (request.path == "/api/settings" || request.path == "/api/control");
+        if (request.method != "GET" && !webPost) { SendResponse(fd, 405, "Method Not Allowed", "text/plain; charset=utf-8", "Only GET is supported, except Web control POST endpoints.\n", "Allow: GET, POST\r\n"); return; }
         if (request.path != "/health" && !IsAuthorized(request)) { Unauthorized(fd); return; }
         if (mKind == ListenerKind::Web) HandleWeb(fd, request); else HandleStream(fd, request, Source());
     }
@@ -246,7 +248,14 @@ private:
             << ",\"tvAudioClients\":" << Audio::GetStats(Audio::Source::TV).clients
             << ",\"gamepadAudioClients\":" << Audio::GetStats(Audio::Source::GamePad).clients
             << ",\"tvAudioDropped\":" << Audio::GetStats(Audio::Source::TV).droppedPackets
-            << ",\"gamepadAudioDropped\":" << Audio::GetStats(Audio::Source::GamePad).droppedPackets
+            << ",\"gamepadAudioDropped\":" << Audio::GetStats(Audio::Source::GamePad).droppedPackets;
+        const auto safety = Safety::GetSnapshot();
+        out << ",\"safetyGovernor\":" << (safety.governorEnabled ? "true" : "false")
+            << ",\"safetyActive\":" << (safety.active ? "true" : "false")
+            << ",\"emergencyStopped\":" << (safety.emergencyStopped ? "true" : "false")
+            << ",\"safetyLevel\":" << safety.level
+            << ",\"safetyInterventions\":" << safety.interventions
+            << ",\"safetyReason\":\"" << safety.reason << "\""
             << ",\"tv\":" << JsonSource(VideoSource::TV) << ",\"gamepad\":" << JsonSource(VideoSource::GamePad) << "}";
         return out.str();
     }
@@ -348,8 +357,63 @@ const host=location.hostname, auth=)HTML" << (auth.empty() ? "''" : "'" + auth +
         if (r.path == "/") { SendResponse(fd, 200, "OK", "text/html; charset=utf-8", BuildMainHtml(r)); return; }
         if (r.path == "/settings" && r.method == "GET") { SendResponse(fd, 200, "OK", "text/html; charset=utf-8", WebSettings::BuildPage(AuthSuffix(r))); return; }
         if (r.path == "/api/settings" && r.method == "POST") { SendResponse(fd, 200, "OK", "application/json; charset=utf-8", WebSettings::ApplyQuery(r.query)); return; }
+        if (r.path == "/api/control" && r.method == "POST") {
+            const std::string action = QueryValue(r.query, "action");
+            if (action == "emergencyStop") {
+                Safety::EmergencyStop();
+                SendResponse(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"message\":\"Streaming stopped. Web Settings remains available.\"}");
+                return;
+            }
+            if (action == "resume") {
+                Safety::ResumeStreaming();
+                SendResponse(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"message\":\"Streaming resumed.\"}");
+                return;
+            }
+            if (action == "recovery") {
+                Settings::SetPreset(static_cast<int>(Settings::Preset::Recovery));
+                Settings::Save();
+                Audio::ApplySettings();
+                SendResponse(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"message\":\"Recovery preset applied.\"}");
+                return;
+            }
+            if (action == "acceptWarning") {
+                Settings::SetSafetyWarningAccepted(true);
+                Settings::Save();
+                SendResponse(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"message\":\"Safety warning acknowledged.\"}");
+                return;
+            }
+            SendResponse(fd, 400, "Bad Request", "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"Unknown control action.\"}");
+            return;
+        }
         if (r.path == "/health") { SendResponse(fd, 200, "OK", "application/json", "{\"ok\":true}"); return; }
         if (r.path == "/api/status" || r.path == "/debug/performance") { SendResponse(fd, 200, "OK", "application/json; charset=utf-8", BuildStatusJson()); return; }
+        if (r.path == "/diagnostics.txt") {
+            const auto tv = FrameStore::Stats(VideoSource::TV);
+            const auto gp = FrameStore::Stats(VideoSource::GamePad);
+            const auto tm = Metrics::Snapshot(VideoSource::TV);
+            const auto gm = Metrics::Snapshot(VideoSource::GamePad);
+            const auto safety = Safety::GetSnapshot();
+            std::ostringstream report;
+            report << "Wii U Web Stream v0.2.0-dev\n"
+                   << "IP: " << Network::ConsoleIpAddress() << "\n"
+                   << "Uptime ms: " << Network::UptimeMs() << "\n"
+                   << "Preset: " << Settings::PresetName() << "\n"
+                   << "Ports: " << Settings::webPort.load() << "/" << Settings::tvPort.load() << "/" << Settings::gamepadPort.load() << "\n"
+                   << "JPEG quality: " << Settings::jpegQuality.load() << "\n"
+                   << "High risk accepted: " << (Settings::HighRiskAccepted() ? "yes" : "no") << "\n"
+                   << "Safety governor: " << (Settings::safetyGovernor.load() ? "on" : "off") << "\n"
+                   << "Safety level: " << safety.level << "\n"
+                   << "Emergency stopped: " << (safety.emergencyStopped ? "yes" : "no") << "\n"
+                   << "Safety reason: " << safety.reason << "\n"
+                   << "TV: " << tv.width << "x" << tv.height << " fps=" << tv.fps << " target=" << Settings::tvFps.load()
+                   << " effective=" << tm.effectiveFps << " clients=" << tv.clients << " ageMs=" << tv.lastFrameAgeMs
+                   << " encoded=" << tm.encodedFrames << " busyDrops=" << tm.droppedEncoderBusy << " encodeFailures=" << tm.encodeFailures << "\n"
+                   << "GamePad: " << gp.width << "x" << gp.height << " fps=" << gp.fps << " target=" << Settings::gamepadFps.load()
+                   << " effective=" << gm.effectiveFps << " clients=" << gp.clients << " ageMs=" << gp.lastFrameAgeMs
+                   << " encoded=" << gm.encodedFrames << " busyDrops=" << gm.droppedEncoderBusy << " encodeFailures=" << gm.encodeFailures << "\n";
+            SendResponse(fd, 200, "OK", "text/plain; charset=utf-8", report.str(), "Content-Disposition: attachment; filename=\"WiiUWebStream-diagnostics.txt\"\r\n");
+            return;
+        }
         if (r.path == "/audio/tv.wav") { ServeAudioWav(fd, Audio::Source::TV); return; }
         if (r.path == "/audio/gamepad.wav") { ServeAudioWav(fd, Audio::Source::GamePad); return; }
         if (r.path == "/snapshot/tv.jpg") { ServeSnapshot(fd, VideoSource::TV); return; }
@@ -421,14 +485,28 @@ void Reconfigure() {
         if (!listener.IsRunning()) listener.Start(desiredPort);
     };
     ensure(gWeb, static_cast<uint16_t>(Settings::webPort.load()));
-    ensure(gTV, static_cast<uint16_t>(Settings::tvPort.load()));
-    ensure(gGamePad, static_cast<uint16_t>(Settings::gamepadPort.load()));
+    if (Safety::EmergencyStopped()) {
+        gTV.Stop();
+        gGamePad.Stop();
+    } else {
+        ensure(gTV, static_cast<uint16_t>(Settings::tvPort.load()));
+        ensure(gGamePad, static_cast<uint16_t>(Settings::gamepadPort.load()));
+    }
     const bool any = gWeb.IsRunning() || gTV.IsRunning() || gGamePad.IsRunning();
     if (any && !gNetworkRunning.load()) gNetworkStarted = std::chrono::steady_clock::now();
     gNetworkRunning.store(any);
 }
 
 void EnsureListeners() { Reconfigure(); }
+void SuspendStreaming() {
+    std::lock_guard<std::mutex> lock(gLifecycleMutex);
+    gTV.Stop();
+    gGamePad.Stop();
+    gNetworkRunning.store(gWeb.IsRunning());
+}
+void ResumeStreaming() {
+    Reconfigure();
+}
 bool IsRunning() { return gNetworkRunning.load(); }
 uint64_t UptimeMs() {
     if (!gNetworkRunning.load() || gNetworkStarted.time_since_epoch().count() == 0) return 0;
