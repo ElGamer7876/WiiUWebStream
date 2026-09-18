@@ -155,88 +155,83 @@ std::string BuildPage(const std::string &authSuffix) {
     const bool highRisk = Settings::HighRiskAccepted();
     const std::string authKey = AuthKey(authSuffix);
     std::ostringstream out;
-    out << R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wii U Web Stream - Settings</title><style>
-:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#0b1118;color:#eef5ff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#15314b,#0b1118 45%)}main{width:min(960px,calc(100% - 24px));margin:auto;padding:24px 0 48px}a{color:#9fd0ff}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.card{background:#111c28dd;border:1px solid #29435c;border-radius:16px;padding:16px;margin:14px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:6px}.check{display:flex;gap:9px;align-items:center;margin:8px 0}input,select,button{font:inherit;border:1px solid #3f6585;background:#10283a;color:#fff;border-radius:9px;padding:9px}button{cursor:pointer;background:#1d4a6c}.warn{border-color:#8b5e24;background:#2a2114}.danger{border-color:#984b4b;background:#2b1717}.safe{border-color:#35704a;background:#14251a}.muted{color:#9db2c7;font-size:.92rem}.status{min-height:1.4em;margin-top:10px}.row{display:flex;gap:8px;flex-wrap:wrap}.stop{background:#741f1f;border-color:#c25b5b}.recover{background:#245f38;border-color:#5d9c70}.overlay{position:fixed;inset:0;background:#05080def;display:grid;place-items:center;padding:18px;z-index:20}.modal{max-width:650px;background:#171d25;border:1px solid #a45b45;border-radius:16px;padding:22px;box-shadow:0 20px 80px #000}.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#25384a;color:#cbe6ff;font-size:.82rem}</style></head><body><main>
-)HTML";
+    out << R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wii U Web Stream Settings</title><style>
+body{font:15px system-ui;margin:14px;max-width:760px;background:#111;color:#eee}fieldset{margin:10px 0;padding:10px;border:1px solid #555}label{display:block;margin:5px 0}input,select,button{font:inherit;margin:2px;padding:4px}a{color:#9cf}.row{display:flex;gap:6px;flex-wrap:wrap}.warn{border-color:#a66}.hide{display:none}small{color:#aaa}
+</style></head><body><h1>Settings</h1><p><a href="/)HTML" << authSuffix << R"HTML(">Dashboard</a> · <a href="/diagnostics.txt)HTML" << authSuffix << R"HTML(">Diagnostics</a></p>)HTML";
     if (!Settings::safetyWarningAccepted.load()) {
-        out << R"HTML(<div class="overlay" id="warningOverlay"><div class="modal"><h2>Development build safety warning</h2><p>This plugin can freeze the Wii U during gameplay and may require a forced power-off. A forced shutdown can lose unsaved progress and may increase the risk of data or filesystem corruption.</p><p>If freezes occur, lower resolution/FPS/JPEG quality. If instability continues, disable or uninstall Wii U Web Stream.</p><button id="acceptWarning">I understand — continue</button></div></div>)HTML";
+        out << R"HTML(<fieldset class="warn" id="warning"><legend>Safety warning</legend><p>This development build may freeze the Wii U during gameplay and can require a forced power-off. Save progress before testing.</p><button id="acceptWarning" type="button">I understand</button></fieldset>)HTML";
     }
-    out << "<div class=\"top\"><div><h1>Wii U Web Stream Settings</h1><div class=\"muted\">v0.2.0-dev · LAN only</div></div><a href=\"/" << authSuffix << "\">Back to dashboard</a></div>";
 
-    out << R"HTML(<section class="card safe"><h2>Safety & Recovery</h2><div id="safetyState" class="muted">Loading safety status…</div><label class="check"><input type="checkbox" form="settings" name="safetyGovernor")HTML"
-        << Checked(Settings::safetyGovernor.load()) << R"HTML(> Enable automatic Safety Governor</label><p class="muted">When sustained overload is detected, the governor temporarily caps FPS, JPEG quality and resolution without overwriting your configured preset.</p><div class="row"><button type="button" class="recover" onclick="control('recovery')">Apply Recovery preset</button><button type="button" class="stop" onclick="control('emergencyStop')">STOP ALL STREAMING</button><button type="button" onclick="control('resume')">Resume Streaming</button><a href="/diagnostics.txt)HTML"
-        << authSuffix << R"HTML(">Download diagnostics</a></div></section>)HTML";
+    out << "<fieldset><legend>Safety & Recovery</legend><p id="safetyState">Loading…</p>"
+        << "<label><input type="checkbox" form="settings" name="safetyGovernor"" << Checked(Settings::safetyGovernor.load()) << "> Safety Governor</label>"
+        << "<div class="row"><button type="button" onclick="control('recovery')">Recovery preset</button><button type="button" onclick="control('emergencyStop')">STOP ALL STREAMING</button><button type="button" onclick="control('resume')">Resume</button></div></fieldset>";
 
-    out << R"HTML(<form id="settings"><section class="card"><h2>General</h2>)HTML"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"enabled\"" << Checked(Settings::enabled.load()) << "> Enable server</label>"
-        << "<div class=\"field\"><label>Preset</label><select name=\"preset\">"
-        << "<option value=\"0\"" << Selected(Settings::preset.load(),0) << ">Custom</option>"
-        << "<option value=\"1\"" << Selected(Settings::preset.load(),1) << ">Low Latency</option>"
-        << "<option value=\"2\"" << Selected(Settings::preset.load(),2) << ">Balanced</option>"
-        << "<option value=\"3\"" << Selected(Settings::preset.load(),3) << ">Quality</option>"
-        << "<option value=\"4\"" << Selected(Settings::preset.load(),4) << ">OBS</option>"
-        << "<option value=\"5\"" << Selected(Settings::preset.load(),5) << ">Recovery / Safe</option></select></div></section>";
+    out << "<form id="settings"><fieldset><legend>General</legend>"
+        << "<label><input type="checkbox" name="enabled"" << Checked(Settings::enabled.load()) << "> Enable server</label>"
+        << "<label>Preset <select name="preset">"
+        << "<option value="0"" << Selected(Settings::preset.load(),0) << ">Custom</option>"
+        << "<option value="1"" << Selected(Settings::preset.load(),1) << ">Low Latency</option>"
+        << "<option value="2"" << Selected(Settings::preset.load(),2) << ">Balanced</option>"
+        << "<option value="3"" << Selected(Settings::preset.load(),3) << ">Quality</option>"
+        << "<option value="4"" << Selected(Settings::preset.load(),4) << ">OBS</option>"
+        << "<option value="5"" << Selected(Settings::preset.load(),5) << ">Recovery</option></select></label></fieldset>";
 
-    out << "<section class=\"card\"><h2>Network</h2><div class=\"grid\">"
-        << "<label class=\"field\">Web port<input type=\"number\" min=\"1024\" max=\"65535\" name=\"webPort\" value=\"" << Settings::webPort.load() << "\"></label>"
-        << "<label class=\"field\">TV port<input type=\"number\" min=\"1024\" max=\"65535\" name=\"tvPort\" value=\"" << Settings::tvPort.load() << "\"></label>"
-        << "<label class=\"field\">GamePad port<input type=\"number\" min=\"1024\" max=\"65535\" name=\"gamepadPort\" value=\"" << Settings::gamepadPort.load() << "\"></label></div>"
-        << "<p class=\"muted\">Listener changes apply asynchronously. Reconnect on the new web port after a few seconds.</p></section>";
+    out << "<fieldset><legend>Network</legend>"
+        << "<label>Web port <input type="number" min="1024" max="65535" name="webPort" value="" << Settings::webPort.load() << ""></label>"
+        << "<label>TV port <input type="number" min="1024" max="65535" name="tvPort" value="" << Settings::tvPort.load() << ""></label>"
+        << "<label>GamePad port <input type="number" min="1024" max="65535" name="gamepadPort" value="" << Settings::gamepadPort.load() << ""></label></fieldset>";
 
-    out << "<section class=\"card\"><h2>Video</h2>"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"tvEnabled\"" << Checked(Settings::tvEnabled.load()) << "> Enable TV capture</label>"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"gamepadEnabled\"" << Checked(Settings::gamepadEnabled.load()) << "> Enable GamePad capture</label>"
-        << "<div class=\"grid\">"
-        << "<label class=\"field\">TV target FPS<input type=\"number\" name=\"tvFps\" min=\"1\" max=\"60\" value=\"" << Settings::tvFps.load() << "\"></label>"
-        << "<label class=\"field\">GamePad target FPS<input type=\"number\" name=\"gamepadFps\" min=\"1\" max=\"60\" value=\"" << Settings::gamepadFps.load() << "\"></label>"
-        << "<label class=\"field\">JPEG quality<input type=\"number\" name=\"jpegQuality\" min=\"35\" max=\"95\" value=\"" << Settings::jpegQuality.load() << "\"></label>";
+    out << "<fieldset><legend>Video</legend>"
+        << "<label><input type="checkbox" name="tvEnabled"" << Checked(Settings::tvEnabled.load()) << "> TV</label>"
+        << "<label><input type="checkbox" name="gamepadEnabled"" << Checked(Settings::gamepadEnabled.load()) << "> GamePad</label>"
+        << "<label>TV FPS <input type="number" name="tvFps" min="1" max="60" value="" << Settings::tvFps.load() << ""></label>"
+        << "<label>GamePad FPS <input type="number" name="gamepadFps" min="1" max="60" value="" << Settings::gamepadFps.load() << ""></label>"
+        << "<label>JPEG quality <input type="number" name="jpegQuality" min="35" max="95" value="" << Settings::jpegQuality.load() << ""></label>";
 
-    auto resolutionSelect = [&out](const char *name, int current, const char *label) {
-        out << "<label class=\"field\">" << label << "<select name=\"" << name << "\">"
-            << "<option value=\"0\"" << Selected(current,0) << ">426x240</option>"
-            << "<option value=\"1\"" << Selected(current,1) << ">640x360</option>"
-            << "<option value=\"2\"" << Selected(current,2) << ">854x480</option>"
-            << "<option value=\"3\"" << Selected(current,3) << ">960x540</option>"
-            << "<option value=\"4\"" << Selected(current,4) << ">1280x720 (HIGH RISK)</option>"
-            << "<option value=\"5\"" << Selected(current,5) << ">1920x1080 (HIGH RISK)</option></select></label>";
+    auto res = [&out](const char *name, int current, const char *label) {
+        out << "<label>" << label << " <select name="" << name << "">"
+            << "<option value="0"" << Selected(current,0) << ">426x240</option>"
+            << "<option value="1"" << Selected(current,1) << ">640x360</option>"
+            << "<option value="2"" << Selected(current,2) << ">854x480</option>"
+            << "<option value="3"" << Selected(current,3) << ">960x540</option>"
+            << "<option value="4"" << Selected(current,4) << ">1280x720 HIGH RISK</option>"
+            << "<option value="5"" << Selected(current,5) << ">1920x1080 HIGH RISK</option></select></label>";
     };
-    resolutionSelect("tvResolution", Settings::tvResolution.load(), "TV resolution");
-    resolutionSelect("gamepadResolution", Settings::gamepadResolution.load(), "GamePad resolution");
-    out << "</div><label class=\"check\"><input type=\"checkbox\" name=\"adaptiveFps\"" << Checked(Settings::adaptiveFps.load()) << "> Adaptive FPS</label>"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"watchdogEnabled\"" << Checked(Settings::watchdogEnabled.load()) << "> Health watchdog</label></section>";
+    res("tvResolution", Settings::tvResolution.load(), "TV resolution");
+    res("gamepadResolution", Settings::gamepadResolution.load(), "GamePad resolution");
 
-    out << "<section class=\"card\"><h2>Security & Logging</h2>"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"authEnabled\"" << Checked(Settings::authEnabled.load()) << "> Require URL access code</label>"
-        << "<div class=\"grid\"><label class=\"field\">Access code<input type=\"number\" name=\"authCode\" min=\"0\" max=\"999999\" value=\"" << Settings::authCode.load() << "\"></label>"
-        << "<label class=\"field\">Log level<select name=\"logLevel\">"
-        << "<option value=\"0\"" << Selected(Settings::logLevel.load(),0) << ">Off</option>"
-        << "<option value=\"1\"" << Selected(Settings::logLevel.load(),1) << ">Errors</option>"
-        << "<option value=\"2\"" << Selected(Settings::logLevel.load(),2) << ">Info</option>"
-        << "<option value=\"3\"" << Selected(Settings::logLevel.load(),3) << ">Verbose</option></select></label></div>"
-        << "<p class=\"muted\">The access code is LAN access control only; HTTP is not encrypted.</p></section>";
+    out << "<label><input type="checkbox" name="adaptiveFps"" << Checked(Settings::adaptiveFps.load()) << "> Adaptive FPS</label>"
+        << "<label><input type="checkbox" name="watchdogEnabled"" << Checked(Settings::watchdogEnabled.load()) << "> Watchdog</label></fieldset>";
 
-    out << "<section class=\"card warn\"><h2>Advanced / Experimental</h2>"
-        << "<label class=\"check\"><input id=\"riskEnable\" type=\"checkbox\" name=\"highRiskEnabled\"" << Checked(Settings::highRiskEnabled.load()) << "> Enable high-risk actions</label>"
-        << "<label class=\"check\"><input id=\"riskAccept\" type=\"checkbox\" name=\"highRiskAccepted\"" << Checked(Settings::highRiskAccepted.load()) << "> I understand and accept the risk</label>"
-        << "<p><strong>WARNING:</strong> High-risk actions can significantly increase CPU, GPU, memory and network load and may freeze or crash the console.</p>"
-        << "<div id=\"riskOptions\" class=\"danger\" style=\"padding:12px;border:1px solid;border-radius:10px;display:" << (highRisk ? "block" : "none") << "\">"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"audioStreaming\"" << Checked(Settings::audioStreaming.load()) << "> Audio streaming (HIGH RISK)</label>"
-        << "<label class=\"check\"><input type=\"checkbox\" name=\"continuousCapture\"" << Checked(Settings::continuousCapture.load()) << "> Continuous capture without viewers (HIGH RISK)</label>"
-        << "<p class=\"muted\">720p/1080p, up to 60 FPS and JPEG quality above 85 require HIGH RISK mode.</p></div></section>";
+    out << "<fieldset><legend>Security & Logging</legend>"
+        << "<label><input type="checkbox" name="authEnabled"" << Checked(Settings::authEnabled.load()) << "> Require URL code</label>"
+        << "<label>Access code <input type="number" name="authCode" min="0" max="999999" value="" << Settings::authCode.load() << ""></label>"
+        << "<label>Log <select name="logLevel">"
+        << "<option value="0"" << Selected(Settings::logLevel.load(),0) << ">Off</option>"
+        << "<option value="1"" << Selected(Settings::logLevel.load(),1) << ">Errors</option>"
+        << "<option value="2"" << Selected(Settings::logLevel.load(),2) << ">Info</option>"
+        << "<option value="3"" << Selected(Settings::logLevel.load(),3) << ">Verbose</option></select></label></fieldset>";
 
-    out << "<div class=\"row\"><button type=\"submit\">Save settings</button><a href=\"/" << authSuffix << "\">Cancel</a></div><div id=\"status\" class=\"status muted\"></div></form>";
+    out << "<fieldset class="warn"><legend>Advanced / Experimental</legend>"
+        << "<label><input id="riskEnable" type="checkbox" name="highRiskEnabled"" << Checked(Settings::highRiskEnabled.load()) << "> Enable HIGH RISK</label>"
+        << "<label><input id="riskAccept" type="checkbox" name="highRiskAccepted"" << Checked(Settings::highRiskAccepted.load()) << "> I accept the risk</label>"
+        << "<div id="riskOptions" class="" << (highRisk ? "" : "hide") << "">"
+        << "<label><input type="checkbox" name="audioStreaming"" << Checked(Settings::audioStreaming.load()) << "> Audio streaming HIGH RISK</label>"
+        << "<label><input type="checkbox" name="continuousCapture"" << Checked(Settings::continuousCapture.load()) << "> Continuous capture HIGH RISK</label>"
+        << "</div></fieldset>";
+
+    out << "<button type="submit">Save</button> <span id="status"></span></form>";
 
     out << R"HTML(<script>
-const f=document.getElementById('settings'),st=document.getElementById('status'),re=document.getElementById('riskEnable'),ra=document.getElementById('riskAccept'),ro=document.getElementById('riskOptions');
-const authKey=')HTML" << authKey << R"HTML(';
-function addKey(q){if(authKey)q.set('key',authKey)}
-function syncRisk(){ro.style.display=(re.checked&&ra.checked)?'block':'none'} re.onchange=syncRisk;ra.onchange=syncRisk;
-async function control(action){const q=new URLSearchParams({action});addKey(q);st.textContent='Applying…';try{const r=await fetch('/api/control?'+q,{method:'POST',cache:'no-store'});const j=await r.json();st.textContent=j.message||'Done';setTimeout(updateSafety,300)}catch(e){st.textContent='Control request failed'}}
-async function updateSafety(){try{const u=new URL('/api/status',location.origin);if(authKey)u.searchParams.set('key',authKey);const s=await (await fetch(u,{cache:'no-store'})).json();const el=document.getElementById('safetyState');const label=s.emergencyStopped?'EMERGENCY STOP':(s.safetyActive?'GOVERNOR LEVEL '+s.safetyLevel:'NORMAL');el.innerHTML='<span class="badge">'+label+'</span> '+(s.safetyReason||'No overload detected.');}catch(e){}}
-f.addEventListener('submit',async e=>{e.preventDefault();const q=new URLSearchParams(new FormData(f));for(const n of ['enabled','tvEnabled','gamepadEnabled','adaptiveFps','watchdogEnabled','authEnabled','highRiskEnabled','highRiskAccepted','audioStreaming','continuousCapture','safetyGovernor']){const el=f.elements[n];q.set(n,el&&el.checked?'1':'0')}addKey(q);st.textContent='Validating and saving…';try{const r=await fetch('/api/settings?'+q,{method:'POST',cache:'no-store'});const j=await r.json();st.textContent=j.message||'Saved';if(j.ok)setTimeout(()=>location.reload(),700)}catch(e){st.textContent='Save failed'}});
-const aw=document.getElementById('acceptWarning');if(aw)aw.onclick=async()=>{await control('acceptWarning');document.getElementById('warningOverlay').remove()};
-syncRisk();updateSafety();setInterval(updateSafety,2000);
-</script></main></body></html>)HTML";
+const f=document.getElementById('settings'),st=document.getElementById('status'),re=document.getElementById('riskEnable'),ra=document.getElementById('riskAccept'),ro=document.getElementById('riskOptions'),K=')HTML" << authKey << R"HTML(';
+function key(q){if(K)q.set('key',K)}
+function risk(){ro.className=(re.checked&&ra.checked)?'':'hide'}re.onchange=risk;ra.onchange=risk;
+async function control(a){const q=new URLSearchParams({action:a});key(q);try{const j=await(await fetch('/api/control?'+q,{method:'POST',cache:'no-store'})).json();st.textContent=j.message||'';status()}catch(e){st.textContent='Request failed'}}
+async function status(){try{const q=new URLSearchParams;key(q);const s=await(await fetch('/api/status'+(q.toString()?'?'+q:''),{cache:'no-store'})).json();safetyState.textContent=s.emergencyStopped?'EMERGENCY STOP':(s.safetyActive?'Governor level '+s.safetyLevel+': '+(s.safetyReason||''):'NORMAL')}catch(e){}}
+f.onsubmit=async e=>{e.preventDefault();const q=new URLSearchParams(new FormData(f));for(const n of ['enabled','tvEnabled','gamepadEnabled','adaptiveFps','watchdogEnabled','authEnabled','highRiskEnabled','highRiskAccepted','audioStreaming','continuousCapture','safetyGovernor']){const x=f.elements[n];q.set(n,x&&x.checked?'1':'0')}key(q);st.textContent='Saving...';try{const j=await(await fetch('/api/settings?'+q,{method:'POST',cache:'no-store'})).json();st.textContent=j.message||'';if(j.ok)setTimeout(()=>location.reload(),500)}catch(e){st.textContent='Save failed'}};
+const aw=document.getElementById('acceptWarning');if(aw)aw.onclick=async()=>{await control('acceptWarning');warning.remove()};
+risk();status();setInterval(status,5000);
+</script></body></html>)HTML";
     return out.str();
 }
 
