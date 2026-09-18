@@ -41,7 +41,7 @@ http://WIIU_IP:7770/settings
 
 The page provides the primary configuration UI for:
 
-- Presets: Custom, Low Latency, Balanced, Quality and OBS.
+- Presets: Custom, Low Latency, Balanced, Quality, OBS and Recovery / Safe.
 - TV/GamePad enable switches.
 - TV/GamePad target FPS.
 - Output resolutions.
@@ -54,6 +54,9 @@ The page provides the primary configuration UI for:
 - High-risk actions and their confirmation gate.
 - Experimental audio streaming.
 - Continuous capture.
+- Automatic Safety Governor.
+- Emergency Stop / Resume controls.
+- Downloadable diagnostics report.
 
 Listener/server changes are applied asynchronously outside the HTTP request thread. This avoids stopping the web listener from inside its own client thread when the web port changes. Reconnect on the new port after a few seconds if you change it.
 
@@ -65,7 +68,22 @@ Listener/server changes are applied asynchronously outside the HTTP request thre
 - **Balanced** — general-purpose default.
 - **Quality** — up to 960x540 TV with lower FPS and higher JPEG quality.
 - **OBS** — OBS-oriented quality/FPS settings.
+- **Recovery / Safe** — 5 FPS, 640x360 outputs, JPEG 60, adaptive FPS on, HIGH RISK off, audio off and continuous capture off.
 - **Custom** — manual FPS, resolution and JPEG settings.
+
+### Safety Governor
+
+The automatic **Safety Governor** watches recent encoder time, encoder-busy drops and frame age while streams are active. Sustained overload triggers temporary safety levels that progressively cap FPS, JPEG quality and, at higher levels, output resolution. These runtime caps do **not** overwrite the user's configured preset and are relaxed gradually after the encoder remains healthy.
+
+Web Settings also provides:
+
+- **Recovery / Safe** preset for a persistent conservative configuration.
+- **STOP ALL STREAMING** to stop capture/audio and disconnect TV/GamePad listeners while keeping the Web Settings listener alive.
+- **Resume Streaming** to restart capture/audio/listeners after an emergency stop.
+- A first-run development safety warning.
+- Transactional validation: invalid settings are rejected before any setting is written.
+- `/diagnostics.txt` for a small downloadable troubleshooting report.
+- An encoder working-memory budget plus allocation-failure guards so oversized/failed temporary buffers are rejected instead of intentionally continuing into an unsafe allocation path.
 
 ### Adaptive FPS
 
@@ -134,9 +152,10 @@ Diagnostics:
 http://WIIU_IP:7770/api/status
 http://WIIU_IP:7770/debug/performance
 http://WIIU_IP:7770/health
+http://WIIU_IP:7770/diagnostics.txt
 ```
 
-`/api/status` includes uptime, actual FPS, target/effective FPS, video clients, last-frame age, capture/drop/failure counters, average JPEG size, scaling/encode timing, listener state, watchdog counters and audio state/counters.
+`/api/status` includes uptime, actual FPS, target/effective FPS, video clients, last-frame age, capture/drop/failure counters, average JPEG size, scaling/encode timing, listener state, watchdog counters, audio state/counters, Safety Governor level/reason and Emergency Stop state.
 
 ## Optional access code
 
@@ -265,7 +284,7 @@ A first physical Wii U test has confirmed that the dashboard loads and both TV a
 
 The WUPS-menu memory issue discovered during that test is the reason full configuration has been moved to the Web Settings page and capture/audio are paused while the minimal WUPS menu is open.
 
-This remains development software: even with normal settings, users should assume a possible mid-game freeze and be prepared for a forced console shutdown. Testing should be done after saving progress and preferably without important unsaved work open.
+This remains development software: even with the Safety Governor and Recovery preset, users should assume a possible mid-game freeze and be prepared for a forced console shutdown. These protections reduce load when measurable overload is detected; they cannot guarantee that every game, GX2 state or Aroma environment will remain stable. Testing should be done after saving progress and preferably without important unsaved work open.
 
 ## Intentionally deferred
 
